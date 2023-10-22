@@ -129,7 +129,7 @@ void *StmtAST::to_koopa()
     res->name = nullptr;
     res->used_by = {nullptr, 0, KOOPA_RSIK_VALUE};
     res->kind.tag = KOOPA_RVT_RETURN;
-    res->kind.data.ret.value = (const koopa_raw_value_data*)ret_val->to_koopa();
+    res->kind.data.ret.value = (const koopa_raw_value_data *)ret_val->to_koopa();
 
     return res;
 }

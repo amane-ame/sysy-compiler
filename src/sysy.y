@@ -28,7 +28,6 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 // 请自行 STFW 在 union 里写一个带析构函数的类会出现什么情况
 %union
 {
-#include "ast.hpp"
     std::string *str_val;
     int int_val;
     BaseAST *ast_val;
@@ -104,4 +103,5 @@ Number: INT_CONST
 void yyerror(std::unique_ptr<BaseAST> &ast, const char *s)
 {
     std::cerr << "error: " << s << std::endl;
+    exit(0);
 }
