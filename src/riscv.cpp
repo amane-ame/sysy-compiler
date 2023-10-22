@@ -1,9 +1,11 @@
+#include <stdexcept>
+#include <string>
 #include "koopa.h"
 #include "riscv.hpp"
 
 static void visit_slice(const koopa_raw_slice_t *rs, std::string &res);
 
-static void gen_riscv_func(koopa_raw_function_t kfunc, std::string &res)
+static void visit_func(koopa_raw_function_t kfunc, std::string &res)
 {
     res += std::string(".globl ") + (kfunc->name + 1) + "\n";
     res += std::string(kfunc->name + 1) + ":\n";
@@ -12,14 +14,14 @@ static void gen_riscv_func(koopa_raw_function_t kfunc, std::string &res)
     return;
 }
 
-static void gen_riscv_block(koopa_raw_basic_block_t kblk, std::string &res)
+static void visit_block(koopa_raw_basic_block_t kblk, std::string &res)
 {
     visit_slice(&kblk->insts, res);
 
     return;
 }
 
-static void gen_riscv_value(koopa_raw_value_t kval, std::string &res)
+static void visit_value(koopa_raw_value_t kval, std::string &res)
 {
     switch(kval->kind.tag)
     {
@@ -28,7 +30,7 @@ static void gen_riscv_value(koopa_raw_value_t kval, std::string &res)
         break;
     case KOOPA_RVT_RETURN:
         res += "li a0, ";
-        gen_riscv_value(kval->kind.data.ret.value, res);
+        visit_value(kval->kind.data.ret.value, res);
         res += "\nret\n";
         break;
     default:
@@ -44,13 +46,13 @@ static void visit_slice(const koopa_raw_slice_t *rs, std::string &res)
         switch(rs->kind)
         {
         case KOOPA_RSIK_FUNCTION:
-            gen_riscv_func((koopa_raw_function_t)rs->buffer[i], res);
+            visit_func((koopa_raw_function_t)rs->buffer[i], res);
             break;
         case KOOPA_RSIK_BASIC_BLOCK:
-            gen_riscv_block((koopa_raw_basic_block_t)rs->buffer[i], res);
+            visit_block((koopa_raw_basic_block_t)rs->buffer[i], res);
             break;
         case KOOPA_RSIK_VALUE:
-            gen_riscv_value((koopa_raw_value_t)rs->buffer[i], res);
+            visit_value((koopa_raw_value_t)rs->buffer[i], res);
             break;
         }
 
