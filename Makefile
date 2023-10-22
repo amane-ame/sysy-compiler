@@ -32,17 +32,21 @@ CC := clang
 CXX := clang++
 FLEX := flex
 BISON := bison
-ifeq ($(shell uname -s), Darwin)
-	BISON := /opt/homebrew/opt/bison/bin/bison
-endif
 
 # Directories
 TOP_DIR := $(shell pwd)
 TARGET_EXEC := compiler
 SRC_DIR := $(TOP_DIR)/src
 BUILD_DIR ?= $(TOP_DIR)/build
-LIB_DIR ?= $(TOP_DIR)/lib
-INC_DIR ?= $(TOP_DIR)/lib
+LIB_DIR ?= $(CDE_LIBRARY_PATH)/native
+INC_DIR ?= $(CDE_INCLUDE_PATH)
+
+ifeq ($(shell uname -s), Darwin)
+	BISON := /opt/homebrew/opt/bison/bin/bison
+	LIB_DIR := $(TOP_DIR)/lib
+	INC_DIR := $(TOP_DIR)/lib
+endif
+
 CFLAGS += -I$(INC_DIR)
 CXXFLAGS += -I$(INC_DIR)
 LDFLAGS += -L$(LIB_DIR) -lkoopa
