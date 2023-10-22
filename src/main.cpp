@@ -3,12 +3,8 @@
 #include <memory>
 #include "ast.hpp"
 #include "koopa.h"
+#include "riscv.hpp"
 
-// 声明 lexer 的输入, 以及 parser 函数
-// 为什么不引用 sysy.tab.hpp 呢? 因为首先里面没有 yyin 的定义
-// 其次, 因为这个文件不是我们自己写的, 而是被 Bison 生成出来的
-// 你的代码编辑器/IDE 很可能找不到这个文件, 然后会给你报错 (虽然编译不会出错)
-// 看起来会很烦人, 于是干脆采用这种看起来 dirty 但实际很有效的手段
 extern FILE *yyin;
 extern int yyparse(std::unique_ptr<BaseAST> &ast);
 
@@ -30,20 +26,29 @@ int main(int argc, const char *argv[])
     std::unique_ptr<BaseAST> ast;
     yyparse(ast);
   
-    // 输出解析得到的 AST, 其实就是个字符串
     std::cout << ast->to_string() << std::endl;
-
-    std::unique_ptr<CompUnitAST> comp_ast((CompUnitAST *)ast.release());
-    koopa_raw_program_t res = comp_ast->to_koopa_program();
-
-    koopa_program_t kp;
-    koopa_generate_raw_to_koopa(&res, &kp);
 
     char buffer[1U << 15];
     size_t sz = 1U << 15;
-    koopa_dump_to_string(kp, buffer, &sz);
 
-    std::cout << buffer << std::endl;
+    std::unique_ptr<CompUnitAST> comp_ast((CompUnitAST *)ast.release());
+    koopa_raw_program_t krp = comp_ast->to_koopa_program();
+
+    if(std::string(mode) == "-koopa")
+    {
+        koopa_program_t kp;
+        koopa_generate_raw_to_koopa(&krp, &kp);
+        koopa_dump_to_string(kp, buffer, &sz);
+    }
+    else if(std::string(mode) == "-riscv")
+    {
+        std::string riscv = koopa2riscv(&krp);
+        riscv.copy(buffer, riscv.size());
+    }
+    else
+        throw std::runtime_error("error: unknown mode " + std::string(mode));
+
+    std::cout << buffer;
     std::ofstream yyout(output);
     yyout << buffer;
 
