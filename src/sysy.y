@@ -36,11 +36,11 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
 %token INT RETURN
-%token <str_val> IDENT
+%token <str_val> IDENT UNARYOP MULOP ADDOP RELOP EQOP LANDOP LOROP
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block Stmt Number
+%type <ast_val> FuncDef FuncType Block Stmt Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp Number
 
 %%
 
@@ -70,7 +70,7 @@ FuncDef: FuncType IDENT '(' ')' Block
     auto type = std::unique_ptr<BaseAST>($1);
     auto ident = std::unique_ptr<std::string>($2);
     auto block = std::unique_ptr<BaseAST>($5);
-    $$ = new FuncDefAST(type, ident->c_str(), block);
+    $$ = new FuncDefAST(type, *ident, block);
 };
 
 // 同上, 不再解释
@@ -85,10 +85,123 @@ Block: '{' Stmt '}'
     $$ = new BlockAST(stmt);
 };
 
-Stmt: RETURN Number ';'
+Stmt: RETURN Exp ';'
 {
-    auto number = std::unique_ptr<BaseAST>($2);
-    $$ = new StmtAST(number);
+    auto exp = std::unique_ptr<BaseAST>($2);
+    $$ = new StmtAST(exp);
+};
+
+Exp: LOrExp
+{
+    auto add_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new ExpAST(add_exp);
+};
+
+PrimaryExp: '(' Exp ')'
+{
+    auto exp = std::unique_ptr<BaseAST>($2);
+    $$ = new PrimaryExpAST(exp);
+}
+| Number
+{
+    auto number = std::unique_ptr<BaseAST>($1);
+    $$ = new PrimaryExpAST(number);
+};
+
+UnaryExp: PrimaryExp
+{
+    auto primary_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new UnaryExpAST(primary_exp);
+}
+| UNARYOP UnaryExp
+{
+    auto op = std::unique_ptr<std::string>($1);
+    auto unary_exp = std::unique_ptr<BaseAST>($2);
+    $$ = new UnaryExpAST(*op, unary_exp);
+}
+| ADDOP UnaryExp
+{
+    auto op = std::unique_ptr<std::string>($1);
+    auto unary_exp = std::unique_ptr<BaseAST>($2);
+    $$ = new UnaryExpAST(*op, unary_exp);
+};
+
+MulExp: UnaryExp
+{
+    auto unary_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new MulExpAST(unary_exp);
+}
+| MulExp MULOP UnaryExp
+{
+    auto left_exp = std::unique_ptr<BaseAST>($1);
+    auto op = std::unique_ptr<std::string>($2);
+    auto right_exp = std::unique_ptr<BaseAST>($3);
+    $$ = new MulExpAST(left_exp, *op, right_exp);
+};
+
+AddExp: MulExp
+{
+    auto mul_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new MulExpAST(mul_exp);
+}
+| AddExp ADDOP MulExp
+{
+    auto left_exp = std::unique_ptr<BaseAST>($1);
+    auto op = std::unique_ptr<std::string>($2);
+    auto right_exp = std::unique_ptr<BaseAST>($3);
+    $$ = new AddExpAST(left_exp, *op, right_exp);
+};
+
+RelExp: AddExp
+{
+    auto add_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new RelExpAST(add_exp);
+}
+| RelExp RELOP AddExp
+{
+    auto left_exp = std::unique_ptr<BaseAST>($1);
+    auto op = std::unique_ptr<std::string>($2);
+    auto right_exp = std::unique_ptr<BaseAST>($3);
+    $$ = new RelExpAST(left_exp, *op, right_exp);
+};
+
+EqExp: RelExp
+{
+    auto rel_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new EqExpAST(rel_exp);
+}
+| EqExp EQOP RelExp
+{
+    auto left_exp = std::unique_ptr<BaseAST>($1);
+    auto op = std::unique_ptr<std::string>($2);
+    auto right_exp = std::unique_ptr<BaseAST>($3);
+    $$ = new EqExpAST(left_exp, *op, right_exp);
+};
+
+LAndExp: EqExp
+{
+    auto eq_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new LAndExpAST(eq_exp);
+}
+| LAndExp LANDOP EqExp
+{
+    auto left_exp = std::unique_ptr<BaseAST>($1);
+    auto op = std::unique_ptr<std::string>($2);
+    auto right_exp = std::unique_ptr<BaseAST>($3);
+    $$ = new LAndExpAST(left_exp, *op, right_exp);
+};
+
+LOrExp: LAndExp
+{
+    auto land_exp = std::unique_ptr<BaseAST>($1);
+    $$ = new LOrExpAST(land_exp);
+}
+| LOrExp LOROP LAndExp
+{
+    auto left_exp = std::unique_ptr<BaseAST>($1);
+    auto op = std::unique_ptr<std::string>($2);
+    auto right_exp = std::unique_ptr<BaseAST>($3);
+    $$ = new LOrExpAST(left_exp, *op, right_exp);
 };
 
 Number: INT_CONST

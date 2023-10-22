@@ -25,8 +25,6 @@ int main(int argc, const char *argv[])
     // 调用 parser 函数, parser 函数会进一步调用 lexer 解析输入文件的
     std::unique_ptr<BaseAST> ast;
     yyparse(ast);
-  
-    std::cout << ast->to_string() << std::endl;
 
     char buffer[1U << 15];
     size_t sz = 1U << 15;
