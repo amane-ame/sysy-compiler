@@ -62,7 +62,7 @@ void *FuncDefAST::to_koopa()
     ("@" + ident).copy(name, sizeof(name));
 
     res->name = name;
-    res->ty = new koopa_raw_type_kind_t{KOOPA_RTT_FUNCTION, .data.function.params = {nullptr, 0, KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa()};
+    res->ty = new koopa_raw_type_kind_t{.tag = KOOPA_RTT_FUNCTION, .data.function.params = {nullptr, 0, KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa()};
     res->params = {nullptr, 0, KOOPA_RSIK_VALUE};
     res->bbs = {vector_data(blocks), (unsigned)blocks.size(), KOOPA_RSIK_BASIC_BLOCK};
 
