@@ -1,4 +1,3 @@
-#include <ranges>
 #include <stdexcept>
 #include "koopa.h"
 #include "symbol.hpp"
