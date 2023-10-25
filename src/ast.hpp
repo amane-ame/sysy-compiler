@@ -4,14 +4,26 @@
 #include <string>
 #include <vector>
 #include "koopa.h"
+#include "symbol.hpp"
+
+enum InstType
+{
+    CONSTDECL,
+    DECL,
+    STMT
+};
 
 // 所有 AST 的基类
 class BaseAST
 {
+protected:
+    static SymbolList symbol_list;
+
 public:
     virtual ~BaseAST(void) = default;
     virtual void *to_koopa(koopa_raw_slice_t parent);
     virtual void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    virtual int value(void);
 };
 
 // CompUnit 是 BaseAST
@@ -43,10 +55,10 @@ public:
 class FuncTypeAST : public BaseAST
 {
 private:
-    std::string name;
+    std::string ident;
 
 public:
-    FuncTypeAST(const char *_name);
+    FuncTypeAST(std::string _ident);
 
     void *to_koopa(koopa_raw_slice_t parent);
 };
@@ -54,25 +66,62 @@ public:
 class BlockAST : public BaseAST
 {
 private:
-    std::unique_ptr<BaseAST> stmt;
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> insts;
 
 public:
-    BlockAST(std::unique_ptr<BaseAST> &_stmt);
+    BlockAST(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_insts);
 
     void *to_koopa(koopa_raw_slice_t parent);
 };
 
-class StmtAST : public BaseAST
+
+class ReturnAST : public BaseAST
 {
 private:
     std::unique_ptr<BaseAST> ret_val;
 
 public:
-    StmtAST(std::unique_ptr<BaseAST> &_ret_val);
+    ReturnAST(std::unique_ptr<BaseAST> &_ret_val);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
 };
 
+class AssignmentAST : public BaseAST
+{
+private:
+    std::unique_ptr<BaseAST> lval;
+    std::unique_ptr<BaseAST> exp;
+
+public:
+    AssignmentAST(std::unique_ptr<BaseAST> &_lval, std::unique_ptr<BaseAST> &_exp);
+
+    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+};
+
+class ConstDefAST : public BaseAST
+{
+private:
+    std::string ident;
+    std::unique_ptr<BaseAST> exp;
+
+public:
+    ConstDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp);
+
+    void *to_koopa(koopa_raw_slice_t parent);
+};
+
+class VarDefAST : public BaseAST
+{
+private:
+    std::string ident;
+    std::unique_ptr<BaseAST> exp;
+
+public:
+    VarDefAST(std::string _ident);
+    VarDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp);
+
+    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+};
 
 class ExpAST : public BaseAST
 {
@@ -83,6 +132,20 @@ public:
     ExpAST(std::unique_ptr<BaseAST> &_unary_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
+};
+
+class LValAST : public BaseAST
+{
+private:
+    std::string ident;
+
+public:
+    LValAST(std::string _ident);
+
+    void *to_koopa(koopa_raw_slice_t parent);
+    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class PrimaryExpAST : public BaseAST
@@ -94,6 +157,7 @@ public:
     PrimaryExpAST(std::unique_ptr<BaseAST> &_next_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class UnaryExpAST : public BaseAST
@@ -112,6 +176,7 @@ public:
     UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class MulExpAST : public BaseAST
@@ -131,6 +196,7 @@ public:
     MulExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class AddExpAST : public BaseAST
@@ -150,6 +216,7 @@ public:
     AddExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class RelExpAST : public BaseAST
@@ -168,6 +235,7 @@ public:
     RelExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class EqExpAST : public BaseAST
@@ -187,6 +255,7 @@ public:
     EqExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class LAndExpAST : public BaseAST
@@ -206,6 +275,7 @@ public:
     LAndExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class LOrExpAST : public BaseAST
@@ -225,6 +295,7 @@ public:
     LOrExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };
 
 class NumberAST : public BaseAST
@@ -237,4 +308,5 @@ public:
 
     void *to_koopa(koopa_raw_slice_t parent);
     void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    int value(void);
 };

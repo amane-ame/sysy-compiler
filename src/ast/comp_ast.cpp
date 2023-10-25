@@ -54,21 +54,24 @@ void *FuncDefAST::to_koopa(koopa_raw_slice_t parent)
     return res;
 }
 
-FuncTypeAST::FuncTypeAST(const char *_name) : name(_name)
+FuncTypeAST::FuncTypeAST(std::string _ident) : ident(_ident)
 {
     return;
 }
 
 void *FuncTypeAST::to_koopa(koopa_raw_slice_t parent)
 {
-    if(name == "int")
+    if(ident == "int")
         return new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32};
-    throw std::runtime_error("error: FuncType is " + name + " but not int");
+    throw std::runtime_error("error: FuncType is " + ident + " but not int");
 }
 
-BlockAST::BlockAST(std::unique_ptr<BaseAST> &_stmt)
+BlockAST::BlockAST(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_insts)
 {
-    stmt = std::move(_stmt);
+    for(auto &inst : _insts)
+        insts.push_back(make_pair(inst.first, std::move(inst.second)));
+
+    return;
 }
 
 void *BlockAST::to_koopa(koopa_raw_slice_t parent)
@@ -80,32 +83,126 @@ void *BlockAST::to_koopa(koopa_raw_slice_t parent)
     res->params = {nullptr, 0, KOOPA_RSIK_VALUE};
     res->used_by = {nullptr, 0, KOOPA_RSIK_VALUE};
 
-    stmt->to_vector(stmts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
+    symbol_list.new_block();
+    for(auto &inst : insts)
+    {
+        switch(inst.first)
+        {
+        case CONSTDECL:
+            inst.second->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN});
+            break;
+        case DECL:
+            inst.second->to_vector(stmts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
+            break;
+        case STMT:
+            inst.second->to_vector(stmts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
+            break;
+        }
+    }
+
     res->insts = {vector_data(stmts), (unsigned)stmts.size(), KOOPA_RSIK_VALUE};
+    symbol_list.delete_block();
 
     return res;
 }
 
-StmtAST::StmtAST(std::unique_ptr<BaseAST> &_ret_val)
+ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val)
 {
     ret_val = std::move(_ret_val);
 
     return;
 }
 
-#include <cstdio>
-
-void *StmtAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
+void *ReturnAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
 {
-    koopa_raw_value_data *res = new koopa_raw_value_data();
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_RETURN}};
     koopa_raw_slice_t child = {new const void *[1]{res}, 1, KOOPA_RSIK_VALUE};
-
-    res->ty = new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT};
-    res->name = nullptr;
-    res->used_by = {nullptr, 0, KOOPA_RSIK_VALUE};
-    res->kind.tag = KOOPA_RVT_RETURN;
+    
     res->kind.data.ret.value = (const koopa_raw_value_data *)ret_val->to_vector(vec, child);
     vec.push_back(res);
 
     return res;
 }
+
+AssignmentAST::AssignmentAST(std::unique_ptr<BaseAST> &_lval, std::unique_ptr<BaseAST> &_exp)
+{
+    lval = std::move(_lval);
+    exp = std::move(_exp);
+
+    return;
+}
+
+void *AssignmentAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
+{
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_STORE}};
+    koopa_raw_slice_t child = {new const void *[1]{res}, 1, KOOPA_RSIK_VALUE};
+
+    res->kind.data.store.value = (koopa_raw_value_t)exp->to_vector(vec, child);
+    res->kind.data.store.dest = (koopa_raw_value_t)lval->to_koopa(child);
+    vec.push_back(res);
+
+    return nullptr;
+}
+
+ConstDefAST::ConstDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp) : ident(_ident)
+{
+    exp = std::move(_exp);
+
+    return;
+}
+
+void *ConstDefAST::to_koopa(koopa_raw_slice_t parent)
+{
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, parent, {.tag = KOOPA_RVT_INTEGER, .data.integer.value = exp->value()}};
+    
+    symbol_list.add_symbol(ident, LVal{LVal::CONST, res});
+
+    return res;
+}
+
+
+VarDefAST::VarDefAST(std::string _ident) : ident(_ident)
+{
+    exp = nullptr;
+
+    return;
+}
+
+VarDefAST::VarDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp) : ident(_ident)
+{
+    exp = std::move(_exp);
+
+    return;
+}
+
+void *VarDefAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
+{
+    koopa_raw_value_data *res = new koopa_raw_value_data();
+    koopa_raw_slice_t child = {new const void *[1]{res}, 1, KOOPA_RSIK_VALUE};
+
+    char *name = new char(ident.size() + 2);
+    ("@" + ident).copy(name, ident.size() + 1);
+
+    res->name = name;
+    res->ty = new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}};
+    res->used_by = parent;
+    res->kind.tag = KOOPA_RVT_ALLOC;
+
+    vec.push_back(res);
+    symbol_list.add_symbol(name, LVal{LVal::VAR, res});
+
+    if(exp)
+    {
+        koopa_raw_value_data *store = new koopa_raw_value_data();
+        store->ty = new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT};
+        store->name = nullptr;
+        store->used_by = {nullptr, 0, KOOPA_RSIK_UNKNOWN};
+        store->kind.tag = KOOPA_RVT_STORE;
+        store->kind.data.store.dest = res;
+        store->kind.data.store.value = (koopa_raw_value_t)exp->to_vector(vec, child);
+        vec.push_back(store);
+    }
+    
+    return res;
+}
+

@@ -15,22 +15,46 @@ void *ExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     return unary_exp->to_vector(vec, parent);
 }
 
+int ExpAST::value(void)
+{
+    return unary_exp->value();
+}
 
-NumberAST::NumberAST(int _val) : val(_val)
+
+LValAST::LValAST(std::string _ident) : ident(_ident)
 {
     return;
 }
 
-void *NumberAST::to_koopa(koopa_raw_slice_t parent)
+void *LValAST::to_koopa(koopa_raw_slice_t parent)
 {
-    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, parent, {.tag = KOOPA_RVT_INTEGER, .data.integer.value = val}};
+    return (void *)symbol_list.get_symbol(ident).number;
+}
+
+void *LValAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
+{
+    koopa_raw_value_data *res = new koopa_raw_value_data();
+
+    auto var = symbol_list.get_symbol(ident);
+    if (var.type == LVal::CONST)
+        return (void *)var.number;
+    else if (var.type == LVal::VAR)
+    {
+        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, parent, {.tag = KOOPA_RVT_LOAD, .data.load.src = var.number}};
+        vec.push_back(res);
+    }
 
     return res;
 }
 
-void *NumberAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
+int LValAST::value(void)
 {
-    return this->to_koopa(parent);
+    auto var = symbol_list.get_symbol(ident);
+
+    if(var.type != LVal::CONST)
+        throw std::runtime_error("error: LValAST must be const in symbol table");
+
+    return var.number->kind.data.integer.value;
 }
 
 PrimaryExpAST::PrimaryExpAST(std::unique_ptr<BaseAST> &_next_exp)
@@ -43,6 +67,11 @@ void *PrimaryExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t paren
     return next_exp->to_vector(vec, parent);
 }
 
+int PrimaryExpAST::value(void)
+{
+    return next_exp->value();
+}
+
 UnaryExpAST::UnaryExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 {
     type = PRIMARY;
@@ -50,6 +79,7 @@ UnaryExpAST::UnaryExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
+
 UnaryExpAST::UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp)
 {
     type = OP;
@@ -85,6 +115,22 @@ void *UnaryExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
         vec.push_back(res);
         break;
     }
+
+    return res;
+}
+
+int UnaryExpAST::value(void)
+{
+    if(type == PRIMARY)
+        return next_exp->value();
+
+    int res = 0;
+    if(op == "+")
+        res = next_exp->value();
+    else if(op == "-")
+        res = -next_exp->value();
+    else if(op == "!")
+        res = !next_exp->value();
 
     return res;
 }
@@ -136,6 +182,22 @@ void *MulExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     return res;
 }
 
+int MulExpAST::value(void)
+{
+    if(type == PRIMARY)
+        return left_exp->value();
+
+    int res = 0;
+    if(op == "*")
+        res = left_exp->value() * right_exp->value();
+    else if(op == "/")
+        res = left_exp->value() / right_exp->value();
+    else if(op == "%")
+        res = left_exp->value() % right_exp->value();
+
+    return res;
+}
+
 AddExpAST::AddExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 {
     type = PRIMARY;
@@ -177,6 +239,20 @@ void *AddExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
         vec.push_back(res);
         break;
     }
+
+    return res;
+}
+
+int AddExpAST::value(void)
+{
+    if(type == PRIMARY)
+        return left_exp->value();
+
+    int res = 0;
+    if(op == "+")
+        res = left_exp->value() + right_exp->value();
+    else if(op == "-")
+        res = left_exp->value() - right_exp->value();
 
     return res;
 }
@@ -230,6 +306,24 @@ void *RelExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     return res;
 }
 
+int RelExpAST::value(void)
+{
+    if(type == PRIMARY)
+        return left_exp->value();
+
+    int res = 0;
+    if(op == "<")
+        res = left_exp->value() < right_exp->value();
+    else if(op == "<=")
+        res = left_exp->value() <= right_exp->value();
+    else if(op == ">")
+        res = left_exp->value() > right_exp->value();
+    else if(op == ">=")
+        res = left_exp->value() >= right_exp->value();
+
+    return res;
+}
+
 EqExpAST::EqExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 {
     type = PRIMARY;
@@ -271,6 +365,20 @@ void *EqExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
         vec.push_back(res);
         break;
     }
+
+    return res;
+}
+
+int EqExpAST::value(void)
+{
+    if(type == PRIMARY)
+        return left_exp->value();
+
+    int res = 0;
+    if(op == "==")
+        res = left_exp->value() == right_exp->value();
+    else if(op == "!=")
+        res = left_exp->value() != right_exp->value();
 
     return res;
 }
@@ -332,6 +440,18 @@ void *LAndExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     return res;
 }
 
+int LAndExpAST::value()
+{
+    if(type == PRIMARY)
+        return left_exp->value();
+
+    int res = 0;
+    if(op == "&&")
+        res = left_exp->value() && right_exp->value();
+
+    return res;
+}
+
 LOrExpAST::LOrExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 {
     type = PRIMARY;
@@ -373,4 +493,38 @@ void *LOrExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     }
 
     return res;
+}
+
+int LOrExpAST::value()
+{
+    if(type == PRIMARY)
+        return left_exp->value();
+
+    int res = 0;
+    if(op == "||")
+        res = left_exp->value() || right_exp->value();
+
+    return res;
+}
+
+NumberAST::NumberAST(int _val) : val(_val)
+{
+    return;
+}
+
+void *NumberAST::to_koopa(koopa_raw_slice_t parent)
+{
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, parent, {.tag = KOOPA_RVT_INTEGER, .data.integer.value = val}};
+
+    return res;
+}
+
+void *NumberAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
+{
+    return this->to_koopa(parent);
+}
+
+int NumberAST::value(void)
+{
+    return val;
 }
