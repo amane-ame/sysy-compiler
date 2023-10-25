@@ -52,7 +52,7 @@ int LValAST::value(void)
     auto var = symbol_list.get_symbol(ident);
 
     if(var.type != LVal::CONST)
-        throw std::runtime_error("error: LValAST must be const in symbol table");
+        throw std::runtime_error("error: LValAST must be LVal::CONST in symbol table");
 
     return var.number->kind.data.integer.value;
 }
@@ -60,6 +60,8 @@ int LValAST::value(void)
 PrimaryExpAST::PrimaryExpAST(std::unique_ptr<BaseAST> &_next_exp)
 {
     next_exp = std::move(_next_exp);
+
+    return;
 }
 
 void *PrimaryExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
@@ -440,7 +442,7 @@ void *LAndExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     return res;
 }
 
-int LAndExpAST::value()
+int LAndExpAST::value(void)
 {
     if(type == PRIMARY)
         return left_exp->value();
@@ -495,7 +497,7 @@ void *LOrExpAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     return res;
 }
 
-int LOrExpAST::value()
+int LOrExpAST::value(void)
 {
     if(type == PRIMARY)
         return left_exp->value();
@@ -521,7 +523,7 @@ void *NumberAST::to_koopa(koopa_raw_slice_t parent)
 
 void *NumberAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
 {
-    return this->to_koopa(parent);
+    return to_koopa(parent);
 }
 
 int NumberAST::value(void)

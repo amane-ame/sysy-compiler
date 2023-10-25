@@ -85,7 +85,6 @@ void *BlockAST::to_koopa(koopa_raw_slice_t parent)
 
     symbol_list.new_block();
     for(auto &inst : insts)
-    {
         switch(inst.first)
         {
         case CONSTDECL:
@@ -98,7 +97,6 @@ void *BlockAST::to_koopa(koopa_raw_slice_t parent)
             inst.second->to_vector(stmts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
             break;
         }
-    }
 
     res->insts = {vector_data(stmts), (unsigned)stmts.size(), KOOPA_RSIK_VALUE};
     symbol_list.delete_block();
@@ -189,20 +187,13 @@ void *VarDefAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     res->kind.tag = KOOPA_RVT_ALLOC;
 
     vec.push_back(res);
-    symbol_list.add_symbol(name, LVal{LVal::VAR, res});
+    symbol_list.add_symbol(ident, LVal{LVal::VAR, res});
 
     if(exp)
     {
-        koopa_raw_value_data *store = new koopa_raw_value_data();
-        store->ty = new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT};
-        store->name = nullptr;
-        store->used_by = {nullptr, 0, KOOPA_RSIK_UNKNOWN};
-        store->kind.tag = KOOPA_RVT_STORE;
-        store->kind.data.store.dest = res;
-        store->kind.data.store.value = (koopa_raw_value_t)exp->to_vector(vec, child);
+        koopa_raw_value_data *store = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_UNKNOWN}, {.tag = KOOPA_RVT_STORE, .data.store.dest = res, .data.store.value = (koopa_raw_value_t)exp->to_vector(vec, child)}};
         vec.push_back(store);
     }
     
     return res;
 }
-
