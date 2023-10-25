@@ -142,7 +142,8 @@ VarDef: IDENT
 
 LVal: IDENT
 {
-    $$ = new LValAST(*($1));
+    auto ident = std::unique_ptr<std::string>($1);
+    $$ = new LValAST(*ident);
 };
 
 Exp: LOrExp
@@ -160,6 +161,11 @@ PrimaryExp: '(' Exp ')'
 {
     auto number = std::unique_ptr<BaseAST>($1);
     $$ = new PrimaryExpAST(number);
+};
+| LVal
+{
+    auto lval = std::unique_ptr<BaseAST>($1);
+    $$ = new PrimaryExpAST(lval);
 };
 
 UnaryExp: PrimaryExp
