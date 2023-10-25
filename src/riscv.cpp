@@ -67,7 +67,7 @@ public:
 
         int t = inst_size(kval);
         if (t == 0)
-            throw std::runtime_error("error: try to alloc empty space on stack");
+            return 0;
         addr[kval] = (cur -= t);
 
         return cur;
