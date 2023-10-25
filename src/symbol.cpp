@@ -19,9 +19,9 @@ void SymbolList::add_symbol(const std::string &name, LVal koopa_item)
 
 LVal SymbolList::get_symbol(const std::string &name)
 {
-    for(auto &page : table | std::views::reverse)
-        if(page.count(name))
-            return page[name];
+    for(auto page = table.rbegin(); page != table.rend(); page ++)
+        if(page->count(name))
+            return (*page)[name];
     
     throw("error: cannot find " + name + " in symbol table");
 }
