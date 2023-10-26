@@ -10,11 +10,11 @@
 #include <string>
 #include "ast.hpp"
 
-std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> inst;
+std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> inst_vec;
 
 void add_inst(InstType inst_type, BaseAST *ast)
 {
-    inst.back().push_back(make_pair(inst_type, std::unique_ptr<BaseAST>(ast)));
+    inst_vec.back().push_back(make_pair(inst_type, std::unique_ptr<BaseAST>(ast)));
 
     return;
 }
@@ -44,7 +44,7 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST IF ELSE
+%token INT RETURN CONST IF ELSE _WHILE _BREAK _CONTINUE
 %token <str_val> IDENT UNARYOP MULOP ADDOP RELOP EQOP LANDOP LOROP
 %token <int_val> INT_CONST
 
@@ -92,12 +92,12 @@ FuncType: INT
 
 Block: '{'
 {
-    inst.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+    inst_vec.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
 }
 BlockItems '}'
 {
-    $$ = new BlockAST(inst.back());
-    inst.pop_back();
+    $$ = new BlockAST(inst_vec.back());
+    inst_vec.pop_back();
 }
 | '{' '}'
 {
@@ -127,30 +127,51 @@ Stmt: RETURN Exp ';'
 {
     auto exp = std::unique_ptr<BaseAST>($1);
     std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> true_insts;
-    for(auto &inst : inst.back())
-        true_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
-    inst.pop_back();
+    for(auto &insts : inst_vec.back())
+        true_insts.push_back(std::make_pair(insts.first, std::move(insts.second)));
+    inst_vec.pop_back();
     add_inst(InstType::BRANCH, new BranchAST(exp, true_insts));
 }
 | IfExp Stmt ELSE
 {
-    inst.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+    inst_vec.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
 }
 Stmt
 {
     auto exp = std::unique_ptr<BaseAST>($1);
     std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> true_insts, false_insts;
-    for(auto &inst : inst.rbegin()[1])
-        true_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
-    for(auto &inst : inst.back())
-        false_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
-    inst.erase(inst.end() - 2, inst.end());
+    for(auto &insts : inst_vec.rbegin()[1])
+        true_insts.push_back(std::make_pair(insts.first, std::move(insts.second)));
+    for(auto &insts : inst_vec.back())
+        false_insts.push_back(std::make_pair(insts.first, std::move(insts.second)));
+    inst_vec.erase(inst_vec.end() - 2, inst_vec.end());
     add_inst(InstType::BRANCH, new BranchAST(exp, true_insts, false_insts));
+}
+| _WHILE '(' Exp ')'
+{
+    inst_vec.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+}
+Stmt
+{
+    auto exp = std::unique_ptr<BaseAST>($3);
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> body_insts;
+    for(auto &insts : inst_vec.back())
+        body_insts.push_back(std::make_pair(insts.first, std::move(insts.second)));
+    inst_vec.pop_back();
+    add_inst(InstType::WHILE, new WhileAST(exp, body_insts));
+}
+| _BREAK ';'
+{
+    add_inst(InstType::BREAK, new BreakAST());
+}
+| _CONTINUE ';'
+{
+    add_inst(InstType::CONTINUE, new ContinueAST());
 };
 
 IfExp: IF '(' Exp ')'
 {
-    inst.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+    inst_vec.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
     $$ = $3;
 };
 

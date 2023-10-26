@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 #include "block.hpp"
 #include "koopa.h"
@@ -12,7 +13,10 @@ enum InstType
     CONSTDECL,
     DECL,
     STMT,
-    BRANCH
+    BRANCH,
+    WHILE,
+    BREAK,
+    CONTINUE
 };
 
 // 所有 AST 的基类
@@ -21,6 +25,7 @@ class BaseAST
 protected:
     static SymbolList symbol_list;
     static BlockInst block_inst;
+    static std::vector<std::tuple<koopa_raw_basic_block_data_t *, koopa_raw_basic_block_data_t *, koopa_raw_basic_block_data_t *>> loop_inst;
 
 public:
     virtual ~BaseAST(void) = default;
@@ -111,6 +116,30 @@ public:
     BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_true_insts);
     BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_true_insts, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_false_insts);
     
+    void *to_koopa(void);
+};
+
+class WhileAST : public BaseAST
+{
+private:
+    std::unique_ptr<BaseAST> exp;
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> body_insts;
+
+public:
+    WhileAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_body_insts);
+
+    void *to_koopa(void);
+};
+
+class BreakAST : public BaseAST
+{
+public:
+    void *to_koopa(void);
+};
+
+class ContinueAST : public BaseAST
+{
+public:
     void *to_koopa(void);
 };
 
