@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "block.hpp"
 #include "koopa.h"
 #include "symbol.hpp"
 
@@ -10,7 +11,8 @@ enum InstType
 {
     CONSTDECL,
     DECL,
-    STMT
+    STMT,
+    BRANCH
 };
 
 // 所有 AST 的基类
@@ -18,11 +20,11 @@ class BaseAST
 {
 protected:
     static SymbolList symbol_list;
+    static BlockInst block_inst;
 
 public:
     virtual ~BaseAST(void) = default;
-    virtual void *to_koopa(koopa_raw_slice_t parent);
-    virtual void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    virtual void *to_koopa(void);
     virtual int value(void);
 };
 
@@ -49,7 +51,7 @@ private:
 public:
     FuncDefAST(std::unique_ptr<BaseAST> &_func_type, std::string _ident, std::unique_ptr<BaseAST> &_block);
 
-    void *to_koopa(koopa_raw_slice_t parent);
+    void *to_koopa(void);
 };
 
 class FuncTypeAST : public BaseAST
@@ -60,7 +62,7 @@ private:
 public:
     FuncTypeAST(std::string _ident);
 
-    void *to_koopa(koopa_raw_slice_t parent);
+    void *to_koopa(void);
 };
 
 class BlockAST : public BaseAST
@@ -71,7 +73,7 @@ private:
 public:
     BlockAST(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_insts);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
 };
 
 
@@ -83,7 +85,7 @@ private:
 public:
     ReturnAST(std::unique_ptr<BaseAST> &_ret_val);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
 };
 
 class AssignmentAST : public BaseAST
@@ -95,7 +97,21 @@ private:
 public:
     AssignmentAST(std::unique_ptr<BaseAST> &_lval, std::unique_ptr<BaseAST> &_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
+};
+
+class BranchAST : public BaseAST
+{
+private:
+    std::unique_ptr<BaseAST> exp;
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> true_insts;
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> false_insts;
+
+public:
+    BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_true_insts);
+    BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_true_insts, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_false_insts);
+    
+    void *to_koopa(void);
 };
 
 class ConstDefAST : public BaseAST
@@ -107,7 +123,7 @@ private:
 public:
     ConstDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp);
 
-    void *to_koopa(koopa_raw_slice_t parent);
+    void *to_koopa(void);
 };
 
 class VarDefAST : public BaseAST
@@ -120,7 +136,7 @@ public:
     VarDefAST(std::string _ident);
     VarDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
 };
 
 class ExpAST : public BaseAST
@@ -131,20 +147,21 @@ private:
 public:
     ExpAST(std::unique_ptr<BaseAST> &_unary_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
 class LValAST : public BaseAST
 {
+friend class AssignmentAST;
+
 private:
     std::string ident;
 
 public:
     LValAST(std::string _ident);
 
-    void *to_koopa(koopa_raw_slice_t parent);
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -156,7 +173,7 @@ private:
 public:
     PrimaryExpAST(std::unique_ptr<BaseAST> &_next_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -175,7 +192,7 @@ public:
     UnaryExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -195,7 +212,7 @@ public:
     MulExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     MulExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -215,7 +232,7 @@ public:
     AddExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     AddExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -234,7 +251,7 @@ public:
     RelExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     RelExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -254,7 +271,7 @@ public:
     EqExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     EqExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -274,7 +291,7 @@ public:
     LAndExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     LAndExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -294,7 +311,7 @@ public:
     LOrExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     LOrExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp);
 
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };
 
@@ -306,7 +323,6 @@ private:
 public:
     NumberAST(int _val);
 
-    void *to_koopa(koopa_raw_slice_t parent);
-    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
+    void *to_koopa(void);
     int value(void);
 };

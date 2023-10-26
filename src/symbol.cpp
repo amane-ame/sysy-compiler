@@ -2,21 +2,7 @@
 #include "koopa.h"
 #include "symbol.hpp"
 
-void SymbolList::set_scope(std::vector<void *> *_scope)
-{
-    scope = _scope;
-
-    return;
-}
-
-void SymbolList::new_scope(void *sc)
-{
-    scope->push_back(sc);
-
-    return;
-}
-
-void SymbolList::new_block(void)
+void SymbolList::new_scope(void)
 {
     table.push_back(std::map<std::string, LVal>());
 
@@ -39,7 +25,7 @@ LVal SymbolList::get_symbol(const std::string &name)
     throw("error: cannot find " + name + " in symbol table");
 }
 
-void SymbolList::delete_block(void)
+void SymbolList::end_scope(void)
 {
     table.pop_back();
 

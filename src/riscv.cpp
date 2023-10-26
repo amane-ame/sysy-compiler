@@ -171,6 +171,22 @@ static void value_binary(const koopa_raw_binary_t *kbinary, int addr, std::strin
     return;
 }
 
+void value_branch(const koopa_raw_branch_t *kbranch, std::string &res)
+{
+    load_reg(kbranch->cond, "t0", res);
+    res += "\tbnez t0, " + std::string(kbranch->true_bb->name + 1) + "\n";
+    res += "\tj " + std::string(kbranch->false_bb->name + 1) + "\n";
+
+    return;
+}
+
+void value_jump(const koopa_raw_jump_t *kjump, std::string &res)
+{
+    res += "\tj " + std::string(kjump->target->name + 1) + "\n";
+
+    return;
+}
+
 static void value_return(const koopa_raw_return_t *kret, std::string &res)
 {
     res += "\n";
@@ -184,7 +200,7 @@ static void value_return(const koopa_raw_return_t *kret, std::string &res)
     return;
 }
 
-
+///////////////////////////////////////////////////////////////
 
 static void visit_slice(const koopa_raw_slice_t *rs, std::string &res);
 
@@ -204,6 +220,7 @@ static void visit_func(koopa_raw_function_t kfunc, std::string &res)
 
 static void visit_block(koopa_raw_basic_block_t kblk, std::string &res)
 {
+    res += "\n" + std::string(kblk->name + 1) + ":\n";
     visit_slice(&kblk->insts, res);
 
     return;
@@ -228,6 +245,12 @@ static void visit_value(koopa_raw_value_t kval, std::string &res)
         break;
     case KOOPA_RVT_BINARY:
         value_binary(&kval->kind.data.binary, addr, res);
+        break;
+    case KOOPA_RVT_BRANCH:
+        value_branch(&kval->kind.data.branch, res);
+        break;
+    case KOOPA_RVT_JUMP:
+        value_jump(&kval->kind.data.jump, res);
         break;
     case KOOPA_RVT_RETURN:
         value_return(&kval->kind.data.ret, res);

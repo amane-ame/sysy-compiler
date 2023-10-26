@@ -10,11 +10,11 @@
 #include <string>
 #include "ast.hpp"
 
-std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> env;
+std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> inst;
 
 void add_inst(InstType inst_type, BaseAST *ast)
 {
-    env.back().push_back(make_pair(inst_type, std::unique_ptr<BaseAST>(ast)));
+    inst.back().push_back(make_pair(inst_type, std::unique_ptr<BaseAST>(ast)));
 
     return;
 }
@@ -44,12 +44,12 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST
+%token INT RETURN CONST IF ELSE
 %token <str_val> IDENT UNARYOP MULOP ADDOP RELOP EQOP LANDOP LOROP
 %token <int_val> INT_CONST
 
 // 非终结符的类型定义
-%type <ast_val> FuncDef FuncType Block
+%type <ast_val> FuncDef FuncType Block IfExp
 %type <ast_val> LVal Number
 %type <ast_val> Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp
 
@@ -92,12 +92,12 @@ FuncType: INT
 
 Block: '{'
 {
-    env.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+    inst.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
 }
 BlockItems '}'
 {
-    $$ = new BlockAST(env.back());
-    env.pop_back();
+    $$ = new BlockAST(inst.back());
+    inst.pop_back();
 }
 | '{' '}'
 {
@@ -110,8 +110,8 @@ BlockItem: Decl | Stmt;
 
 Stmt: RETURN Exp ';'
 {
-    auto number = std::unique_ptr<BaseAST>($2);
-    add_inst(InstType::STMT, new ReturnAST(number));
+    auto val = std::unique_ptr<BaseAST>($2);
+    add_inst(InstType::STMT, new ReturnAST(val));
 }
 | LVal '=' Exp ';'
 {
@@ -123,6 +123,36 @@ Stmt: RETURN Exp ';'
 {
     add_inst(InstType::STMT, $1);
 }
+| IfExp Stmt
+{
+    auto exp = std::unique_ptr<BaseAST>($1);
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> true_insts;
+    for(auto &inst : inst.back())
+        true_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
+    inst.pop_back();
+    add_inst(InstType::BRANCH, new BranchAST(exp, true_insts));
+}
+| IfExp Stmt ELSE
+{
+    inst.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+}
+Stmt
+{
+    auto exp = std::unique_ptr<BaseAST>($1);
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> true_insts, false_insts;
+    for(auto &inst : inst.rbegin()[1])
+        true_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
+    for(auto &inst : inst.back())
+        false_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
+    inst.erase(inst.end() - 2, inst.end());
+    add_inst(InstType::BRANCH, new BranchAST(exp, true_insts, false_insts));
+};
+
+IfExp: IF '(' Exp ')'
+{
+    inst.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+    $$ = $3;
+};
 
 Decl: ConstDecl | VarDecl;
 
@@ -168,8 +198,8 @@ PrimaryExp: '(' Exp ')'
 }
 | Number
 {
-    auto number = std::unique_ptr<BaseAST>($1);
-    $$ = new PrimaryExpAST(number);
+    auto val = std::unique_ptr<BaseAST>($1);
+    $$ = new PrimaryExpAST(val);
 };
 | LVal
 {

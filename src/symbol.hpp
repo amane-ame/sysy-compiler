@@ -19,15 +19,11 @@ struct LVal
 class SymbolList
 {
 private:
-    std::vector<void *> *scope;
     std::vector<std::map<std::string, LVal>> table;
 
 public:
-    void set_scope(std::vector<void *> *_scope);
-    void new_scope(void *sc);
-
-    void new_block(void);
-    void delete_block(void);
+    void new_scope(void);
+    void end_scope(void);
 
     void add_symbol(const std::string &name, LVal koopa_item);
     LVal get_symbol(const std::string &name);
