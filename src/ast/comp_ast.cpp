@@ -48,19 +48,20 @@ FuncDefAST::FuncDefAST(std::unique_ptr<BaseAST> &_func_type, std::string _ident,
 
 void *FuncDefAST::to_koopa(koopa_raw_slice_t parent)
 {
-    std::vector<void *> blocks{block->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN})}, insts;
+    std::vector<void *> blocks, insts;
     koopa_raw_function_data_t *res = new koopa_raw_function_data_t();
 
-    res->name = string_data("@" + ident);
-    res->ty = new koopa_raw_type_kind_t{.tag = KOOPA_RTT_FUNCTION, .data.function.params = {nullptr, 0, KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN})};
-    res->params = {nullptr, 0, KOOPA_RSIK_VALUE};
-    res->bbs = {vector_data(blocks), (unsigned)blocks.size(), KOOPA_RSIK_BASIC_BLOCK};
 
     koopa_raw_basic_block_data_t *entry = new koopa_raw_basic_block_data_t{string_data("%entry_" + ident), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}};
     block->to_vector(insts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
     entry->insts = {vector_data(insts), (unsigned)insts.size(), KOOPA_RSIK_VALUE};
     symbol_list.set_scope(&blocks);
     symbol_list.new_scope(entry);
+
+    res->name = string_data("@" + ident);
+    res->ty = new koopa_raw_type_kind_t{.tag = KOOPA_RTT_FUNCTION, .data.function.params = {nullptr, 0, KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN})};
+    res->params = {nullptr, 0, KOOPA_RSIK_VALUE};
+    res->bbs = {vector_data(blocks), (unsigned)blocks.size(), KOOPA_RSIK_BASIC_BLOCK};
 
     return res;
 }
