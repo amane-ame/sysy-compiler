@@ -15,7 +15,7 @@ static const void **vector_data(std::vector<void *> &vec)
 static char *string_data(std::string s)
 {
     char *res = new char[s.size() + 1];
-    s.copy(res, s.size());
+    res[s.copy(res, s.size())] = 0;
 
     return res;
 }
@@ -187,11 +187,11 @@ void *WhileAST::to_koopa(void)
     koopa_raw_basic_block_data_t *while_entry = new koopa_raw_basic_block_data_t{string_data("%while_entry"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
     koopa_raw_basic_block_data_t *while_body = new koopa_raw_basic_block_data_t{string_data("%while_body"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
     koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{string_data("%end"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
-    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BRANCH, .data.branch.cond = (koopa_raw_value_t)exp->to_koopa(), .data.branch.true_bb = while_body, .data.branch.false_bb = end_block, .data.branch.true_args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.branch.false_args = {nullptr, 0, KOOPA_RSIK_VALUE}}};
 
     loop_inst.push_back(std::make_tuple(while_entry, while_body, end_block));
     block_inst.add_inst(new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_JUMP, .data.jump.args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.jump.target = while_entry}});
     block_inst.new_block(while_entry);
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BRANCH, .data.branch.cond = (koopa_raw_value_t)exp->to_koopa(), .data.branch.true_bb = while_body, .data.branch.false_bb = end_block, .data.branch.true_args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.branch.false_args = {nullptr, 0, KOOPA_RSIK_VALUE}}};
     block_inst.add_inst(res);
 
     block_inst.new_block(while_body);
