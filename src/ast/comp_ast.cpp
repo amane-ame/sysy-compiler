@@ -12,6 +12,14 @@ static const void **vector_data(std::vector<void *> &vec)
     return buffer;
 }
 
+static char *string_data(std::string s)
+{
+    char *res = new char[s.size() + 1];
+    s.copy(res, s.size());
+
+    return res;
+}
+
 CompUnitAST::CompUnitAST(std::unique_ptr<BaseAST> &_func_def)
 {
     func_def = std::move(_func_def);
@@ -40,16 +48,19 @@ FuncDefAST::FuncDefAST(std::unique_ptr<BaseAST> &_func_type, std::string _ident,
 
 void *FuncDefAST::to_koopa(koopa_raw_slice_t parent)
 {
-    std::vector<void *> blocks{block->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN})};
+    std::vector<void *> blocks{block->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN})}, insts;
     koopa_raw_function_data_t *res = new koopa_raw_function_data_t();
 
-    char *name = new char(ident.size() + 2);
-    ("@" + ident).copy(name, ident.size() + 1);
-
-    res->name = name;
+    res->name = string_data("@" + ident);
     res->ty = new koopa_raw_type_kind_t{.tag = KOOPA_RTT_FUNCTION, .data.function.params = {nullptr, 0, KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN})};
     res->params = {nullptr, 0, KOOPA_RSIK_VALUE};
     res->bbs = {vector_data(blocks), (unsigned)blocks.size(), KOOPA_RSIK_BASIC_BLOCK};
+
+    koopa_raw_basic_block_data_t *entry = new koopa_raw_basic_block_data_t{string_data("%entry_" + ident), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}};
+    block->to_vector(insts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
+    entry->insts = {vector_data(insts), (unsigned)insts.size(), KOOPA_RSIK_VALUE};
+    symbol_list.set_scope(&blocks);
+    symbol_list.new_scope(entry);
 
     return res;
 }
@@ -74,15 +85,8 @@ BlockAST::BlockAST(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_
     return;
 }
 
-void *BlockAST::to_koopa(koopa_raw_slice_t parent)
+void *BlockAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
 {
-    std::vector<void *> stmts;
-    koopa_raw_basic_block_data_t *res = new koopa_raw_basic_block_data_t();
-
-    res->name = "%entry";
-    res->params = {nullptr, 0, KOOPA_RSIK_VALUE};
-    res->used_by = {nullptr, 0, KOOPA_RSIK_VALUE};
-
     symbol_list.new_block();
     for(auto &inst : insts)
         switch(inst.first)
@@ -91,17 +95,15 @@ void *BlockAST::to_koopa(koopa_raw_slice_t parent)
             inst.second->to_koopa({nullptr, 0, KOOPA_RSIK_UNKNOWN});
             break;
         case DECL:
-            inst.second->to_vector(stmts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
+            inst.second->to_vector(vec, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
             break;
         case STMT:
-            inst.second->to_vector(stmts, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
+            inst.second->to_vector(vec, {nullptr, 0, KOOPA_RSIK_UNKNOWN});
             break;
         }
-
-    res->insts = {vector_data(stmts), (unsigned)stmts.size(), KOOPA_RSIK_VALUE};
     symbol_list.delete_block();
 
-    return res;
+    return nullptr;
 }
 
 ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val)
@@ -178,10 +180,7 @@ void *VarDefAST::to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent)
     koopa_raw_value_data *res = new koopa_raw_value_data();
     koopa_raw_slice_t child = {new const void *[1]{res}, 1, KOOPA_RSIK_VALUE};
 
-    char *name = new char(ident.size() + 2);
-    ("@" + ident).copy(name, ident.size() + 1);
-
-    res->name = name;
+    res->name = string_data("@" + ident);
     res->ty = new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}};
     res->used_by = parent;
     res->kind.tag = KOOPA_RVT_ALLOC;

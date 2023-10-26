@@ -71,7 +71,7 @@ private:
 public:
     BlockAST(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_insts);
 
-    void *to_koopa(koopa_raw_slice_t parent);
+    void *to_vector(std::vector<void *> &vec, koopa_raw_slice_t parent);
 };
 
 

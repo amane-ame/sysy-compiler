@@ -66,7 +66,7 @@ public:
             return addr[kval];
 
         int t = inst_size(kval);
-        if (t == 0)
+        if(!t)
             return 0;
         addr[kval] = (cur -= t);
 

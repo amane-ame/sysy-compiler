@@ -2,6 +2,20 @@
 #include "koopa.h"
 #include "symbol.hpp"
 
+void SymbolList::set_scope(std::vector<void *> *_scope)
+{
+    scope = _scope;
+
+    return;
+}
+
+void SymbolList::new_scope(void *sc)
+{
+    scope->push_back(sc);
+
+    return;
+}
+
 void SymbolList::new_block(void)
 {
     table.push_back(std::map<std::string, LVal>());
