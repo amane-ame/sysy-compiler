@@ -149,7 +149,11 @@ BlockItems '}'
 BlockItems: BlockItem | BlockItem BlockItems;
 BlockItem: Decl | Stmt;
 
-Stmt: RETURN Exp ';'
+Stmt: RETURN ';'
+{
+    add_inst(InstType::STMT, new ReturnAST());
+}
+| RETURN Exp ';'
 {
     auto val = std::unique_ptr<BaseAST>($2);
     add_inst(InstType::STMT, new ReturnAST(val));

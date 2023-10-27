@@ -117,8 +117,10 @@ class ReturnAST : public BaseAST
 {
 private:
     std::unique_ptr<BaseAST> ret_val;
+    bool has_val;
 
 public:
+    ReturnAST(void);
     ReturnAST(std::unique_ptr<BaseAST> &_ret_val);
 
     void *to_koopa(void);

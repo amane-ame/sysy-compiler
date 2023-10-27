@@ -1,6 +1,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <typeinfo>
 #include <vector>
 #include "../ast.hpp"
 
@@ -153,6 +154,8 @@ void *FuncDefAST::to_koopa(void)
     }
     for(auto &inst : ((BlockAST *)block.get())->insts)
         inst.second->to_koopa();
+    if(((BlockAST *)block.get())->insts.empty() || typeid((((BlockAST *)block.get())->insts).back()) != typeid(ReturnAST))
+        ReturnAST().to_koopa();
 
     block_inst.end_block();
     symbol_list.end_scope();
@@ -180,7 +183,12 @@ void *BlockAST::to_koopa(void)
     return nullptr;
 }
 
-ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val)
+ReturnAST::ReturnAST(void) : has_val(false)
+{
+    return;
+}
+
+ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val) : has_val(true)
 {
     ret_val = std::move(_ret_val);
 
@@ -189,8 +197,10 @@ ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val)
 
 void *ReturnAST::to_koopa(void)
 {
-    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_RETURN, .data.ret.value = (const koopa_raw_value_data *)ret_val->to_koopa()}};
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_RETURN}};
 
+    if(has_val)
+        res->kind.data.ret.value = (const koopa_raw_value_data *)ret_val->to_koopa();
     block_inst.add_inst(res);
 
     return res;
