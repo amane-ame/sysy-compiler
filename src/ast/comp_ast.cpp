@@ -129,7 +129,7 @@ void *FuncDefAST::to_koopa(void)
     std::vector<void *> params, blocks;
 
     for(auto &fparam : fparams)
-        params.push_back(fparam->to_koopa());
+        params.push_back(((FuncFParamAST *)fparam.get())->get_type());
     koopa_raw_type_kind_t *ty = new koopa_raw_type_kind_t{.tag = KOOPA_RTT_FUNCTION, .data.function.params = {vector_data(params), (unsigned)params.size(), KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa()};
     
     params.clear();
