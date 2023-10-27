@@ -22,10 +22,15 @@ enum InstType
 // 所有 AST 的基类
 class BaseAST
 {
+friend class BlockInst;
+
 protected:
     static SymbolList symbol_list;
     static BlockInst block_inst;
     static std::vector<std::tuple<koopa_raw_basic_block_data_t *, koopa_raw_basic_block_data_t *, koopa_raw_basic_block_data_t *>> loop_inst;
+
+    const void **vector_data(std::vector<void *> &vec);
+    char *string_data(std::string s);
 
 public:
     virtual ~BaseAST(void) = default;
@@ -37,26 +42,15 @@ public:
 class CompUnitAST : public BaseAST
 {
 private:
-    std::unique_ptr<BaseAST> func_def;
+    std::vector<std::unique_ptr<BaseAST>> func_vec;
+    std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> value_vec;
+
+    void libfuncs(std::vector<void*> &funcs);
 
 public:
-    CompUnitAST(std::unique_ptr<BaseAST> &_func_def);
+    CompUnitAST(std::vector<std::unique_ptr<BaseAST>> &_func_vec, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_value_vec);
 
     koopa_raw_program_t to_koopa_program(void);
-};
-
-// FuncDef 也是 BaseAST
-class FuncDefAST : public BaseAST
-{
-private:
-    std::unique_ptr<BaseAST> func_type;
-    std::string ident;
-    std::unique_ptr<BaseAST> block;
-
-public:
-    FuncDefAST(std::unique_ptr<BaseAST> &_func_type, std::string _ident, std::unique_ptr<BaseAST> &_block);
-
-    void *to_koopa(void);
 };
 
 class FuncTypeAST : public BaseAST
@@ -70,8 +64,45 @@ public:
     void *to_koopa(void);
 };
 
+class FuncFParamAST : public BaseAST
+{
+friend class FuncDefAST;
+
+public:
+    enum ParamType
+    {
+        INT
+    } type;
+
+private:
+    std::string ident;
+    int index;
+
+public:
+    FuncFParamAST(ParamType _type, std::string _ident, int _index);
+
+    koopa_raw_type_kind *get_type(void);
+    void *to_koopa(void);
+};
+
+class FuncDefAST : public BaseAST
+{
+private:
+    std::unique_ptr<BaseAST> func_type;
+    std::string ident;
+    std::vector<std::unique_ptr<BaseAST>> fparams;
+    std::unique_ptr<BaseAST> block;
+
+public:
+    FuncDefAST(std::unique_ptr<BaseAST> &_func_type, std::string _ident, std::vector<std::unique_ptr<BaseAST>> &_fparams, std::unique_ptr<BaseAST> &_block);
+
+    void *to_koopa(void);
+};
+
 class BlockAST : public BaseAST
 {
+friend class FuncDefAST;
+
 private:
     std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> insts;
 
@@ -157,6 +188,8 @@ public:
 
 class VarDefAST : public BaseAST
 {
+friend class GlobalVarDefAST;
+
 private:
     std::string ident;
     std::unique_ptr<BaseAST> exp;
@@ -164,6 +197,18 @@ private:
 public:
     VarDefAST(std::string _ident);
     VarDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp);
+
+    void *to_koopa(void);
+};
+
+class GlobalVarDefAST : public BaseAST
+{
+private:
+    std::string ident;
+    std::unique_ptr<BaseAST> exp;
+
+public:
+    GlobalVarDefAST(std::unique_ptr<BaseAST> &vardef_ast);
 
     void *to_koopa(void);
 };
@@ -212,14 +257,17 @@ private:
     enum
     {
         PRIMARY,
-        OP
+        OP,
+        FUNCTION
     } type;
     std::string op;
     std::unique_ptr<BaseAST> next_exp;
+    std::vector<std::unique_ptr<BaseAST>> rparams;
 
 public:
     UnaryExpAST(std::unique_ptr<BaseAST> &_primary_exp);
     UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp);
+    UnaryExpAST(std::string _ident, std::vector<std::unique_ptr<BaseAST>> &_rparams);
 
     void *to_koopa(void);
     int value(void);

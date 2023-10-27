@@ -1,15 +1,8 @@
 #include <algorithm>
 #include <vector>
+#include "ast.hpp"
 #include "block.hpp"
 #include "koopa.h"
-
-static const void **vector_data(std::vector<void *> &vec)
-{
-    auto buffer = new const void *[vec.size()];
-    std::copy(vec.begin(), vec.end(), buffer);
-
-    return buffer;
-}
 
 void BlockInst::set_block(std::vector<void *> *_block)
 {
@@ -43,7 +36,7 @@ void BlockInst::end_block(void)
 
         koopa_raw_basic_block_data_t *last = (koopa_raw_basic_block_data_t *)(*block->rbegin());
         if(!last->insts.buffer)
-            last->insts = {vector_data(current), (unsigned)current.size(), KOOPA_RSIK_VALUE};
+            last->insts = {BaseAST().vector_data(current), (unsigned)current.size(), KOOPA_RSIK_VALUE};
     }
     current.clear();
 

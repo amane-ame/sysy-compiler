@@ -3,17 +3,17 @@
 #include <map>
 #include <string>
 #include <vector>
-#include "koopa.h"
 
 struct LVal
 {
     enum SymbolType
     {
         CONST,
-        VAR
+        VAR,
+        FUNCTION
     } type;
 
-    koopa_raw_value_t number;
+    void *number;
 };
 
 class SymbolList

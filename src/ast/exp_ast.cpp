@@ -35,7 +35,7 @@ void *LValAST::to_koopa(void)
         return (void *)var.number;
     else if (var.type == LVal::VAR)
     {
-        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_LOAD, .data.load.src = var.number}};
+        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_LOAD, .data.load.src = (koopa_raw_value_t)var.number}};
         block_inst.add_inst(res);
     }
 
@@ -49,7 +49,7 @@ int LValAST::value(void)
     if(var.type != LVal::CONST)
         throw std::runtime_error("error: LValAST must be LVal::CONST in symbol table");
 
-    return var.number->kind.data.integer.value;
+    return ((koopa_raw_value_t)var.number)->kind.data.integer.value;
 }
 
 PrimaryExpAST::PrimaryExpAST(std::unique_ptr<BaseAST> &_next_exp)
@@ -77,11 +77,19 @@ UnaryExpAST::UnaryExpAST(std::unique_ptr<BaseAST> &_primary_exp)
     return;
 }
 
-UnaryExpAST::UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp)
+UnaryExpAST::UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp) : op(_op)
 {
     type = OP;
-    op = std::string(_op);
     next_exp = std::move(_unary_exp);
+
+    return;
+}
+
+UnaryExpAST::UnaryExpAST(std::string _ident, std::vector<std::unique_ptr<BaseAST>> &_rparams) : op(_ident)
+{
+    type = FUNCTION;
+    for(auto &rparam : _rparams)
+        rparams.push_back(std::move(rparam));
 
     return;
 }
@@ -89,9 +97,19 @@ UnaryExpAST::UnaryExpAST(std::string _op, std::unique_ptr<BaseAST> &_unary_exp)
 void *UnaryExpAST::to_koopa(void)
 {
     koopa_raw_value_data *res = nullptr;
+    koopa_raw_function_data_t *func = nullptr;
+    std::vector<void *> params;
 
     switch(type)
     {
+    case FUNCTION:
+        func = (koopa_raw_function_data_t *)symbol_list.get_symbol(op).number;
+        for(auto &rparam : rparams)
+            params.push_back(rparam->to_koopa());
+        res = new koopa_raw_value_data{func->ty->data.function.ret, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_CALL, .data.call.callee = func, .data.call.args = {vector_data(params), (unsigned)params.size(), KOOPA_RSIK_VALUE}}};
+        
+        block_inst.add_inst(res);
+        break;
     case PRIMARY:
         res = (koopa_raw_value_data *)next_exp->to_koopa();
         break;
@@ -138,11 +156,10 @@ MulExpAST::MulExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
-MulExpAST::MulExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp)
+MulExpAST::MulExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp) : op(_op)
 {
     type = OP;
     left_exp = std::move(_left_exp);
-    op = std::string(_op);
     right_exp = std::move(_right_exp);
 
     return;
@@ -200,11 +217,10 @@ AddExpAST::AddExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
-AddExpAST::AddExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp)
+AddExpAST::AddExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp) : op(_op)
 {
     type = OP;
     left_exp = std::move(_left_exp);
-    op = std::string(_op);
     right_exp = std::move(_right_exp);
 
     return;
@@ -258,11 +274,10 @@ RelExpAST::RelExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
-RelExpAST::RelExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp)
+RelExpAST::RelExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp) : op(_op)
 {
     type = OP;
     left_exp = std::move(_left_exp);
-    op = std::string(_op);
     right_exp = std::move(_right_exp);
 
     return;
@@ -324,11 +339,10 @@ EqExpAST::EqExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
-EqExpAST::EqExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp)
+EqExpAST::EqExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp) : op(_op)
 {
     type = OP;
     left_exp = std::move(_left_exp);
-    op = std::string(_op);
     right_exp = std::move(_right_exp);
 
     return;
@@ -395,11 +409,10 @@ LAndExpAST::LAndExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
-LAndExpAST::LAndExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp)
+LAndExpAST::LAndExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp) : op(_op)
 {
     type = OP;
     left_exp = std::move(_left_exp);
-    op = std::string(_op);
     right_exp = std::move(_right_exp);
 
     return;
@@ -449,11 +462,10 @@ LOrExpAST::LOrExpAST(std::unique_ptr<BaseAST> &_primary_exp)
 
     return;
 }
-LOrExpAST::LOrExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp)
+LOrExpAST::LOrExpAST(std::unique_ptr<BaseAST> &_left_exp, std::string _op, std::unique_ptr<BaseAST> &_right_exp) : op(_op)
 {
     type = OP;
     left_exp = std::move(_left_exp);
-    op = std::string(_op);
     right_exp = std::move(_right_exp);
 
     return;

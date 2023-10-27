@@ -8,9 +8,12 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 #include "ast.hpp"
 
 std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> inst_vec;
+std::vector<std::unique_ptr<BaseAST>> func_vec, fparams;
+std::vector<std::vector<std::unique_ptr<BaseAST>>> rparams;
 
 void add_inst(InstType inst_type, BaseAST *ast)
 {
@@ -44,7 +47,7 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 // lexer 返回的所有 token 种类的声明
 // 注意 IDENT 和 INT_CONST 会返回 token 的值, 分别对应 str_val 和 int_val
-%token INT RETURN CONST IF ELSE _WHILE _BREAK _CONTINUE
+%token INT VOID RETURN CONST IF ELSE _WHILE _BREAK _CONTINUE
 %token <str_val> IDENT UNARYOP MULOP ADDOP RELOP EQOP LANDOP LOROP
 %token <int_val> INT_CONST
 
@@ -60,11 +63,27 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 // 而 parser 一旦解析完 CompUnit, 就说明所有的 token 都被解析了, 即解析结束了
 // 此时我们应该把 FuncDef 返回的结果收集起来, 作为 AST 传给调用 parser 的函数
 // $1 指代规则里第一个符号的返回值, 也就是 FuncDef 的返回值
-CompUnit: FuncDef
+
+
+CompUnit:
 {
-    auto func = std::unique_ptr<BaseAST>($1);
-    ast = std::unique_ptr<BaseAST>(new CompUnitAST(func));
+    inst_vec.push_back(std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>());
+}
+GlobalList
+{
+    ast = std::unique_ptr<BaseAST>(new CompUnitAST(func_vec, inst_vec.back()));
+    inst_vec.pop_back();
 };
+
+GlobalList: FuncDef
+{
+    func_vec.push_back(std::unique_ptr<BaseAST>($1));
+}
+| GlobalList FuncDef
+{
+    func_vec.push_back(std::unique_ptr<BaseAST>($2));
+} 
+| Decl | GlobalList Decl ;
 
 // FuncDef ::= FuncType IDENT '(' ')' Block;
 // 我们这里可以直接写 '(' 和 ')', 因为之前在 lexer 里已经处理了单个字符的情况
@@ -76,18 +95,40 @@ CompUnit: FuncDef
 // 否则会发生内存泄漏, 而 unique_ptr 这种智能指针可以自动帮我们 delete
 // 虽然此处你看不出用 unique_ptr 和手动 delete 的区别, 但当我们定义了 AST 之后
 // 这种写法会省下很多内存管理的负担
-FuncDef: FuncType IDENT '(' ')' Block
+FuncDef: FuncType IDENT '('
+{
+    fparams.clear();
+}
+FuncFParams ')' Block
+{
+    auto type = std::unique_ptr<BaseAST>($1);
+    auto ident = std::unique_ptr<std::string>($2);
+    auto block = std::unique_ptr<BaseAST>($7);
+    $$ = new FuncDefAST(type, *ident, fparams, block);
+}
+| FuncType IDENT '(' ')' Block
 {
     auto type = std::unique_ptr<BaseAST>($1);
     auto ident = std::unique_ptr<std::string>($2);
     auto block = std::unique_ptr<BaseAST>($5);
-    $$ = new FuncDefAST(type, *ident, block);
+    fparams.clear();
+    $$ = new FuncDefAST(type, *ident, fparams, block);
 };
 
-// 同上, 不再解释
 FuncType: INT
 {
     $$ = new FuncTypeAST("int");
+}
+| VOID
+{
+    $$ = new FuncTypeAST("void");
+};
+
+FuncFParams: FuncFParam | FuncFParams ',' FuncFParam;
+FuncFParam: INT IDENT
+{
+    auto ident = std::unique_ptr<std::string>($2);
+    fparams.push_back(std::make_unique<FuncFParamAST>(FuncFParamAST::INT, *ident, fparams.size()));
 };
 
 Block: '{'
@@ -119,7 +160,11 @@ Stmt: RETURN Exp ';'
     auto exp = std::unique_ptr<BaseAST>($3);
     add_inst(InstType::STMT, new AssignmentAST(lval, exp));
 }
-| ';' | Exp ';' | Block
+| ';' | Exp ';'
+{
+    add_inst(InstType::STMT, $1);
+}
+| Block
 {
     add_inst(InstType::STMT, $1);
 }
@@ -177,7 +222,7 @@ IfExp: IF '(' Exp ')'
 
 Decl: ConstDecl | VarDecl;
 
-ConstDecl: CONST INT ConstDefList ';';
+ConstDecl: CONST FuncType ConstDefList ';';
 ConstDefList: ConstDef | ConstDefList ',' ConstDef
 ConstDef: IDENT '=' Exp
 {
@@ -186,7 +231,7 @@ ConstDef: IDENT '=' Exp
     add_inst(InstType::CONSTDECL, new ConstDefAST(*ident, exp));
 };
 
-VarDecl: INT VarDefList ';';
+VarDecl: FuncType VarDefList ';';
 VarDefList: VarDef | VarDefList ',' VarDef
 VarDef: IDENT
 {
@@ -221,7 +266,7 @@ PrimaryExp: '(' Exp ')'
 {
     auto val = std::unique_ptr<BaseAST>($1);
     $$ = new PrimaryExpAST(val);
-};
+}
 | LVal
 {
     auto lval = std::unique_ptr<BaseAST>($1);
@@ -244,7 +289,30 @@ UnaryExp: PrimaryExp
     auto op = std::unique_ptr<std::string>($1);
     auto unary_exp = std::unique_ptr<BaseAST>($2);
     $$ = new UnaryExpAST(*op, unary_exp);
+}
+| IDENT '('
+{
+    rparams.push_back(std::vector<std::unique_ptr<BaseAST>>());
+}
+FuncRParams ')'
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    $$ = new UnaryExpAST(*ident, rparams.back());
+    rparams.pop_back();
+}
+| IDENT '(' ')'
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    rparams.push_back(std::vector<std::unique_ptr<BaseAST>>());
+    $$ = new UnaryExpAST(*ident, rparams.back());
+    rparams.pop_back();
 };
+
+FuncRParams: FuncRParam | FuncRParams ',' FuncRParam;
+FuncRParam: Exp
+{
+    rparams.back().push_back(std::unique_ptr<BaseAST>($1));
+}
 
 MulExp: UnaryExp
 {
