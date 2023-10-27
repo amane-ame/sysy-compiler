@@ -389,12 +389,12 @@ int EqExpAST::value(void)
     return res;
 }
 
-static void *to_bool(BlockInst *block_inst, koopa_raw_value_t exp)
+static koopa_raw_value_data *to_bool(BlockInst *block_inst, koopa_raw_value_t exp, int op)
 {
     koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BINARY}};
 
     auto &binary = res->kind.data.binary;
-    binary.op = KOOPA_RBO_NOT_EQ;
+    binary.op = op;
     binary.lhs = exp;
     binary.rhs = (koopa_raw_value_t)NumberAST(0).to_koopa();
 
@@ -428,13 +428,23 @@ void *LAndExpAST::to_koopa(void)
         res = (koopa_raw_value_data *)left_exp->to_koopa();
         break;
     case OP:
-        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BINARY}};
+        koopa_raw_value_data *temp_var = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}}, "%temp", {nullptr, 0, KOOPA_RSIK_TYPE}, {.tag = KOOPA_RVT_ALLOC}};
+        koopa_raw_value_data *temp_store = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_UNKNOWN}, {.tag = KOOPA_RVT_STORE, .data.store.dest = temp_var, .data.store.value = (koopa_raw_value_t)NumberAST(0).to_koopa()}};
+        block_inst.add_inst(temp_var);
+        block_inst.add_inst(temp_store);
 
-        auto &binary = res->kind.data.binary;
-        if(op == "&&")
-            binary.op = KOOPA_RBO_AND;
-        binary.lhs = (koopa_raw_value_t)to_bool(&block_inst, (koopa_raw_value_t)left_exp->to_koopa());
-        binary.rhs = (koopa_raw_value_t)to_bool(&block_inst, (koopa_raw_value_t)right_exp->to_koopa());
+        koopa_raw_basic_block_data_t *true_block = new koopa_raw_basic_block_data_t{"%true", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+        koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{"%end", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+        koopa_raw_value_data *branch = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BRANCH, .data.branch.cond = to_bool(&block_inst, (koopa_raw_value_t)left_exp->to_koopa(), KOOPA_RBO_NOT_EQ), .data.branch.true_bb = true_block, .data.branch.false_bb = end_block, .data.branch.true_args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.branch.false_args = {nullptr, 0, KOOPA_RSIK_VALUE}}};
+        block_inst.add_inst(branch);
+
+        block_inst.new_block(true_block);
+        koopa_raw_value_data *b_store = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_UNKNOWN}, {.tag = KOOPA_RVT_STORE, .data.store.dest = temp_var, .data.store.value = to_bool(&block_inst, (koopa_raw_value_t)right_exp->to_koopa(), KOOPA_RBO_NOT_EQ)}};
+        block_inst.add_inst(b_store);
+        block_inst.add_inst(new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_JUMP, .data.jump.args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.jump.target = end_block}});
+
+        block_inst.new_block(end_block);
+        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_LOAD, .data.load.src = temp_var}};
 
         block_inst.add_inst(res);
         break;
@@ -481,13 +491,23 @@ void *LOrExpAST::to_koopa(void)
         res = (koopa_raw_value_data *)left_exp->to_koopa();
         break;
     case OP:
-        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BINARY}};
+        koopa_raw_value_data *temp_var = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}}, "%temp", {nullptr, 0, KOOPA_RSIK_TYPE}, {.tag = KOOPA_RVT_ALLOC}};
+        koopa_raw_value_data *temp_store = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_UNKNOWN}, {.tag = KOOPA_RVT_STORE, .data.store.dest = temp_var, .data.store.value = (koopa_raw_value_t)NumberAST(1).to_koopa()}};
+        block_inst.add_inst(temp_var);
+        block_inst.add_inst(temp_store);
 
-        auto &binary = res->kind.data.binary;
-        if(op == "||")
-            binary.op = KOOPA_RBO_OR;
-        binary.lhs = (koopa_raw_value_t)to_bool(&block_inst, (koopa_raw_value_t)left_exp->to_koopa());
-        binary.rhs = (koopa_raw_value_t)to_bool(&block_inst, (koopa_raw_value_t)right_exp->to_koopa());
+        koopa_raw_basic_block_data_t *true_block = new koopa_raw_basic_block_data_t{"%true", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+        koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{"%end", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+        koopa_raw_value_data *branch = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BRANCH, .data.branch.cond = to_bool(&block_inst, (koopa_raw_value_t)left_exp->to_koopa(), KOOPA_RBO_EQ), .data.branch.true_bb = true_block, .data.branch.false_bb = end_block, .data.branch.true_args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.branch.false_args = {nullptr, 0, KOOPA_RSIK_VALUE}}};
+        block_inst.add_inst(branch);
+
+        block_inst.new_block(true_block);
+        koopa_raw_value_data *b_store = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_UNKNOWN}, {.tag = KOOPA_RVT_STORE, .data.store.dest = temp_var, .data.store.value = to_bool(&block_inst, (koopa_raw_value_t)right_exp->to_koopa(), KOOPA_RBO_NOT_EQ)}};
+        block_inst.add_inst(b_store);
+        block_inst.add_inst(new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_JUMP, .data.jump.args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.jump.target = end_block}});
+
+        block_inst.new_block(end_block);
+        res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_LOAD, .data.load.src = temp_var}};
 
         block_inst.add_inst(res);
         break;

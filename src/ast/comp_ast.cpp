@@ -245,9 +245,9 @@ BranchAST::BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstT
 
 void *BranchAST::to_koopa(void)
 {
-    koopa_raw_basic_block_data_t *true_block = new koopa_raw_basic_block_data_t{string_data("%true"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
-    koopa_raw_basic_block_data_t *false_block = new koopa_raw_basic_block_data_t{string_data("%false"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
-    koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{string_data("%end"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+    koopa_raw_basic_block_data_t *true_block = new koopa_raw_basic_block_data_t{"%true", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+    koopa_raw_basic_block_data_t *false_block = new koopa_raw_basic_block_data_t{"%false", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+    koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{"%end", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
     koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_BRANCH, .data.branch.cond = (koopa_raw_value_t)exp->to_koopa(), .data.branch.true_bb = true_block, .data.branch.false_bb = false_block, .data.branch.true_args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.branch.false_args = {nullptr, 0, KOOPA_RSIK_VALUE}}};
 
     block_inst.add_inst(res);
@@ -283,9 +283,9 @@ WhileAST::WhileAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstTyp
 
 void *WhileAST::to_koopa(void)
 {
-    koopa_raw_basic_block_data_t *while_entry = new koopa_raw_basic_block_data_t{string_data("%while_entry"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
-    koopa_raw_basic_block_data_t *while_body = new koopa_raw_basic_block_data_t{string_data("%while_body"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
-    koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{string_data("%end"), {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+    koopa_raw_basic_block_data_t *while_entry = new koopa_raw_basic_block_data_t{"%while_entry", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+    koopa_raw_basic_block_data_t *while_body = new koopa_raw_basic_block_data_t{"%while_body", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
+    koopa_raw_basic_block_data_t *end_block = new koopa_raw_basic_block_data_t{"%end", {nullptr, 0, KOOPA_RSIK_VALUE}, {nullptr, 0, KOOPA_RSIK_VALUE}, {}};
 
     loop_inst.push_back(std::make_tuple(while_entry, while_body, end_block));
     block_inst.add_inst(new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_JUMP, .data.jump.args = {nullptr, 0, KOOPA_RSIK_VALUE}, .data.jump.target = while_entry}});
