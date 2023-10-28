@@ -31,19 +31,23 @@ int main(int argc, const char *argv[])
 
     std::unique_ptr<CompUnitAST> comp_ast((CompUnitAST *)ast.release());
     koopa_raw_program_t krp = comp_ast->to_koopa_program();
+    koopa_program_t kp;
+    koopa_generate_raw_to_koopa(&krp, &kp);
+    koopa_dump_to_string(kp, buffer, &sz);
+    koopa_delete_program(kp);
 
-    if(std::string(mode) == "-koopa")
+    if(std::string(mode) == "-riscv")
     {
-        koopa_program_t kp;
-        koopa_generate_raw_to_koopa(&krp, &kp);
-        koopa_dump_to_string(kp, buffer, &sz);
-    }
-    else if(std::string(mode) == "-riscv")
-    {
-        std::string riscv = koopa2riscv(&krp);
+        koopa_program_t new_kp;
+        koopa_parse_from_string(buffer, &new_kp);
+        koopa_raw_program_builder_t kp_builder = koopa_new_raw_program_builder();
+        koopa_raw_program_t new_krp = koopa_build_raw_program(kp_builder, new_kp);
+        koopa_delete_program(new_kp);
+
+        std::string riscv = koopa2riscv(&new_krp);
         riscv.copy(buffer, riscv.size());
     }
-    else
+    else if(std::string(mode) != "-koopa")
         throw std::runtime_error("error: unknown mode " + std::string(mode));
 
     std::cout << buffer;
