@@ -56,6 +56,8 @@ CompUnitAST::CompUnitAST(std::vector<std::unique_ptr<BaseAST>> &_func_vec, std::
     for(auto &value : _value_vec)
         if(value.first == DECL)
             value_vec.push_back(make_pair(value.first, std::unique_ptr<BaseAST>(new GlobalVarDefAST(value.second))));
+        else if(value.first == ARRAYDECL)
+            value_vec.push_back(make_pair(value.first, std::unique_ptr<BaseAST>(new GlobalArrayDefAST(value.second))));
         else
             value_vec.push_back(make_pair(value.first, std::move(value.second)));
 
@@ -70,8 +72,8 @@ koopa_raw_program_t CompUnitAST::to_koopa_program(void)
     libfuncs(funcs);
     for(auto &value : value_vec)
     {
-        if(value.first != CONSTDECL && value.first != DECL)
-            throw std::runtime_error("error: global value must be CONSTDECL or DECL");
+        if(value.first != CONSTDECL && value.first != DECL && value.first != ARRAYDECL)
+            throw std::runtime_error("error: global value must be CONSTDECL or DECL or ARRAYDECL");
         if(value.first == CONSTDECL)
             value.second->to_koopa();
         else
@@ -103,11 +105,33 @@ FuncFParamAST::FuncFParamAST(ParamType _type, std::string _ident, int _index) : 
     return;
 }
 
+FuncFParamAST::FuncFParamAST(ParamType _type, std::string _ident, int _index, std::vector<std::unique_ptr<BaseAST>> &_sz_exp) : type(_type), ident(_ident), index(_index)
+{
+   for(auto &exp : _sz_exp)
+       sz_exp.push_back(std::move(exp));
+
+   return;
+}
+
 koopa_raw_type_kind *FuncFParamAST::get_type(void)
 {
     if(type == INT)
         return new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32};
-    throw std::runtime_error("error: FuncFParam is not int");
+    else if(type == ARRAY)
+    {
+        if(sz_exp.empty())
+            return new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}};
+        else
+        {
+            std::vector<int> sz;
+            for(auto &exp : sz_exp)
+                sz.push_back(exp->value());
+
+            return new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = array_data(sz, 0)};
+        }
+    }
+
+    throw std::runtime_error("error: FuncFParam is not INT or ARRAY");
 }
 
 void *FuncFParamAST::to_koopa(void)
@@ -132,7 +156,7 @@ void *FuncDefAST::to_koopa(void)
     for(auto &fparam : fparams)
         params.push_back(((FuncFParamAST *)fparam.get())->get_type());
     koopa_raw_type_kind_t *ty = new koopa_raw_type_kind_t{.tag = KOOPA_RTT_FUNCTION, .data.function.params = {vector_data(params), (unsigned)params.size(), KOOPA_RSIK_TYPE}, .data.function.ret = (const struct koopa_raw_type_kind *)func_type->to_koopa()};
-    
+
     params.clear();
     for(auto &fparam : fparams)
         params.push_back(fparam->to_koopa());
@@ -147,8 +171,8 @@ void *FuncDefAST::to_koopa(void)
     for(int i = 0; i < (int)fparams.size(); i++)
     {
         FuncFParamAST *fp = (FuncFParamAST *)fparams[i].get();
-        koopa_raw_value_data *allo = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}}, string_data("@" + fp->ident), {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_ALLOC}};
-        symbol_list.add_symbol(fp->ident, {LVal::VAR, allo});
+        koopa_raw_value_data *allo = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = ((koopa_raw_value_t)params[i])->ty}, string_data("@" + fp->ident), {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_ALLOC}};
+        symbol_list.add_symbol(fp->ident, {allo->ty->data.pointer.base->tag == KOOPA_RTT_POINTER ? LVal::POINTER : LVal::VAR, allo});
         block_inst.add_inst(allo);
         block_inst.add_inst(new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_STORE, .data.store.value = (koopa_raw_value_t)params[i], .data.store.dest = allo}});
     }
@@ -183,12 +207,12 @@ void *BlockAST::to_koopa(void)
     return nullptr;
 }
 
-ReturnAST::ReturnAST(void) : has_val(false)
+ReturnAST::ReturnAST(void) : ret_val(nullptr)
 {
     return;
 }
 
-ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val) : has_val(true)
+ReturnAST::ReturnAST(std::unique_ptr<BaseAST> &_ret_val)
 {
     ret_val = std::move(_ret_val);
 
@@ -199,7 +223,7 @@ void *ReturnAST::to_koopa(void)
 {
     koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_RETURN}};
 
-    if(has_val)
+    if(ret_val)
         res->kind.data.ret.value = (const koopa_raw_value_data *)ret_val->to_koopa();
     block_inst.add_inst(res);
 
@@ -216,7 +240,7 @@ AssignmentAST::AssignmentAST(std::unique_ptr<BaseAST> &_lval, std::unique_ptr<Ba
 
 void *AssignmentAST::to_koopa(void)
 {
-    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_STORE, .data.store.value = (koopa_raw_value_t)exp->to_koopa(), .data.store.dest = (koopa_raw_value_t)symbol_list.get_symbol(((LValAST *)lval.get())->ident).number}};
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_STORE, .data.store.value = (koopa_raw_value_t)exp->to_koopa(), .data.store.dest = (koopa_raw_value_t)((LValAST *)lval.get())->left_value()}};
 
     block_inst.add_inst(res);
 
@@ -330,7 +354,7 @@ ConstDefAST::ConstDefAST(std::string _ident, std::unique_ptr<BaseAST> &_exp) : i
 void *ConstDefAST::to_koopa(void)
 {
     koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_INTEGER, .data.integer.value = exp->value()}};
-    
+
     symbol_list.add_symbol(ident, LVal{LVal::CONST, res});
 
     return res;
@@ -363,13 +387,13 @@ void *VarDefAST::to_koopa(void)
         koopa_raw_value_data *store = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_UNIT}, nullptr, {nullptr, 0, KOOPA_RSIK_UNKNOWN}, {.tag = KOOPA_RVT_STORE, .data.store.dest = res, .data.store.value = (koopa_raw_value_t)exp->to_koopa()}};
         block_inst.add_inst(store);
     }
-    
+
     return res;
 }
 
 GlobalVarDefAST::GlobalVarDefAST(std::unique_ptr<BaseAST> &vardef_ast)
 {
-    VarDefAST *var = (VarDefAST *)vardef_ast.release();
+    VarDefAST *var = (VarDefAST *)vardef_ast.get();
     ident = var->ident;
     exp = std::move(var->exp);
 

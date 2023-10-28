@@ -12,6 +12,7 @@ enum InstType
 {
     CONSTDECL,
     DECL,
+    ARRAYDECL,
     STMT,
     BRANCH,
     WHILE,
@@ -31,6 +32,7 @@ protected:
 
     const void **vector_data(std::vector<void *> &vec);
     char *string_data(std::string s);
+    koopa_raw_type_kind *array_data(std::vector<int> &sz, int pos);
 
 public:
     virtual ~BaseAST(void) = default;
@@ -71,15 +73,18 @@ friend class FuncDefAST;
 public:
     enum ParamType
     {
-        INT
+        INT,
+        ARRAY
     } type;
 
 private:
     std::string ident;
     int index;
+    std::vector<std::unique_ptr<BaseAST>> sz_exp;
 
 public:
     FuncFParamAST(ParamType _type, std::string _ident, int _index);
+    FuncFParamAST(ParamType _type, std::string _ident, int _index, std::vector<std::unique_ptr<BaseAST>> &_sz_exp);
 
     koopa_raw_type_kind *get_type(void);
     void *to_koopa(void);
@@ -117,7 +122,6 @@ class ReturnAST : public BaseAST
 {
 private:
     std::unique_ptr<BaseAST> ret_val;
-    bool has_val;
 
 public:
     ReturnAST(void);
@@ -148,7 +152,7 @@ private:
 public:
     BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_true_insts);
     BranchAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_true_insts, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_false_insts);
-    
+
     void *to_koopa(void);
 };
 
@@ -232,11 +236,19 @@ class LValAST : public BaseAST
 friend class AssignmentAST;
 
 private:
+    enum ValType
+    {
+        NUM,
+        ARRAY
+    } type;
     std::string ident;
+    std::vector<std::unique_ptr<BaseAST>> idx_vec;
 
 public:
     LValAST(std::string _ident);
+    LValAST(std::string _ident, std::vector<std::unique_ptr<BaseAST>> &_idx_vec);
 
+    void *left_value(void);
     void *to_koopa(void);
     int value(void);
 };
@@ -404,4 +416,63 @@ public:
 
     void *to_koopa(void);
     int value(void);
+};
+
+class InitValAST : public BaseAST
+{
+friend class GlobalArrayDefAST;
+
+private:
+    enum
+    {
+        EXP,
+        ARRAY
+    } type;
+    bool is_const;
+    std::unique_ptr<BaseAST> exp;
+    std::vector<std::unique_ptr<BaseAST>> arr_vec;
+
+    std::vector<koopa_raw_value_t> cache;
+
+public:
+    InitValAST(std::unique_ptr<BaseAST> &_exp);
+    InitValAST(std::vector<std::unique_ptr<BaseAST>> &_arr_list);
+
+    void sub_preprocess(std::vector<int> &pro, int align, std::vector<koopa_raw_value_t> &buf);
+    void preprocess(const std::vector<int> &sz);
+
+    koopa_raw_value_t index(int idx);
+    koopa_raw_value_t sub_make_aggerate(std::vector<int> &sz, std::vector<int> &pro, int align, std::vector<koopa_raw_value_t> &buf, int pos);
+    koopa_raw_value_t make_aggerate(std::vector<int> &sz);
+};
+
+class ArrayDefAST : public BaseAST
+{
+friend class GlobalArrayDefAST;
+
+private:
+    std::string ident;
+    std::vector<std::unique_ptr<BaseAST>> sz_exp;
+    std::unique_ptr<BaseAST> init_val;
+
+    koopa_raw_value_data *index(int i, std::vector<int> &pro, koopa_raw_value_data *src, int pos);
+
+public:
+    ArrayDefAST(std::string _ident, std::vector<std::unique_ptr<BaseAST>> &_exp);
+    ArrayDefAST(std::string _ident, std::vector<std::unique_ptr<BaseAST>> &_exp, std::unique_ptr<BaseAST> &_init_val);
+
+    void *to_koopa(void);
+};
+
+class GlobalArrayDefAST : public BaseAST
+{
+private:
+    std::string ident;
+    std::vector<std::unique_ptr<BaseAST>> sz_exp;
+    std::unique_ptr<BaseAST> init_val;
+
+public:
+    GlobalArrayDefAST(std::unique_ptr<BaseAST> &arraydef_ast);
+
+    void *to_koopa(void);
 };

@@ -10,6 +10,8 @@ struct LVal
     {
         CONST,
         VAR,
+        ARRAY,
+        POINTER,
         FUNCTION
     } type;
 

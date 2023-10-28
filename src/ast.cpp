@@ -19,3 +19,16 @@ char *BaseAST::string_data(std::string s)
 
     return res;
 }
+
+koopa_raw_type_kind *BaseAST::array_data(std::vector<int> &sz, int pos)
+{
+    std::vector<koopa_raw_type_kind *> vec;
+
+    for(int i = pos; i < (int)sz.size(); i ++)
+        vec.push_back(new koopa_raw_type_kind{.tag = KOOPA_RTT_ARRAY, .data.array.len = (size_t)sz[i]});
+    vec.back()->data.array.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32};
+    for(int i = 0; i < (int)vec.size() - 1; i ++)
+        vec[i]->data.array.base = vec[i + 1];
+
+    return vec[0];
+}

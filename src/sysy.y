@@ -11,9 +11,9 @@
 #include <vector>
 #include "ast.hpp"
 
-std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> inst_vec;
-std::vector<std::unique_ptr<BaseAST>> func_vec, fparams;
-std::vector<std::vector<std::unique_ptr<BaseAST>>> rparams;
+static std::vector<std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>>> inst_vec;
+static std::vector<std::unique_ptr<BaseAST>> func_vec, fparams, arr_size;
+static std::vector<std::vector<std::unique_ptr<BaseAST>>> rparams, idx_vec, arr_vec;
 
 void add_inst(InstType inst_type, BaseAST *ast)
 {
@@ -53,7 +53,7 @@ void yyerror(std::unique_ptr<BaseAST> &ast, const char *s);
 
 // 非终结符的类型定义
 %type <ast_val> FuncDef FuncType Block IfExp
-%type <ast_val> LVal Number
+%type <ast_val> LVal Number InitVal
 %type <ast_val> Exp PrimaryExp UnaryExp MulExp AddExp RelExp EqExp LAndExp LOrExp
 
 %%
@@ -82,7 +82,7 @@ GlobalList: FuncDef
 | GlobalList FuncDef
 {
     func_vec.push_back(std::unique_ptr<BaseAST>($2));
-} 
+}
 | Decl | GlobalList Decl ;
 
 // FuncDef ::= FuncType IDENT '(' ')' Block;
@@ -129,6 +129,17 @@ FuncFParam: INT IDENT
 {
     auto ident = std::unique_ptr<std::string>($2);
     fparams.push_back(std::make_unique<FuncFParamAST>(FuncFParamAST::INT, *ident, fparams.size()));
+}
+| INT IDENT '[' ']'
+{
+    auto ident = std::unique_ptr<std::string>($2);
+    fparams.push_back(std::make_unique<FuncFParamAST>(FuncFParamAST::ARRAY, *ident, fparams.size(), arr_size));
+}
+| INT IDENT '[' ']' ArraySizeList
+{
+    auto ident = std::unique_ptr<std::string>($2);
+    fparams.push_back(std::make_unique<FuncFParamAST>(FuncFParamAST::ARRAY, *ident, fparams.size(), arr_size));
+    arr_size.clear();
 };
 
 Block: '{'
@@ -233,6 +244,19 @@ ConstDef: IDENT '=' Exp
     auto ident = std::unique_ptr<std::string>($1);
     auto exp = std::unique_ptr<BaseAST>($3);
     add_inst(InstType::CONSTDECL, new ConstDefAST(*ident, exp));
+}
+| IDENT ArraySizeList '=' InitVal
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    auto initval = std::unique_ptr<BaseAST>($4);
+    add_inst(InstType::ARRAYDECL, new ArrayDefAST(*ident, arr_size, initval));
+    arr_size.clear();
+};
+| IDENT ArraySizeList
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    add_inst(InstType::ARRAYDECL, new ArrayDefAST(*ident, arr_size));
+    arr_size.clear();
 };
 
 VarDecl: FuncType VarDefList ';';
@@ -247,13 +271,84 @@ VarDef: IDENT
     auto ident = std::unique_ptr<std::string>($1);
     auto exp = std::unique_ptr<BaseAST>($3);
     add_inst(InstType::DECL, new VarDefAST(*ident, exp));
+}
+| IDENT ArraySizeList '=' InitVal
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    auto initval = std::unique_ptr<BaseAST>($4);
+    add_inst(InstType::ARRAYDECL, new ArrayDefAST(*ident, arr_size, initval));
+    arr_size.clear();
+};
+| IDENT ArraySizeList
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    add_inst(InstType::ARRAYDECL, new ArrayDefAST(*ident, arr_size));
+    arr_size.clear();
+};
+
+ArraySizeList: ArraySize | ArraySizeList ArraySize;
+
+ArraySize: '[' Exp ']'
+{
+    auto exp = std::unique_ptr<BaseAST>($2);
+    arr_size.push_back(std::move(exp));
+};
+
+InitVal: Exp
+{
+    auto exp = std::unique_ptr<BaseAST>($1);
+    $$ = new InitValAST(exp);
+}
+| '{'
+{
+    arr_vec.push_back(std::vector<std::unique_ptr<BaseAST>>());
+}
+ArrInitList '}'
+{
+    $$ = new InitValAST(arr_vec.back());
+    arr_vec.pop_back();
+}
+| '{' '}'
+{
+    arr_vec.push_back(std::vector<std::unique_ptr<BaseAST>>());
+    $$ = new InitValAST(arr_vec.back());
+    arr_vec.pop_back();
+};
+
+ArrInitList: InitVal
+{
+    auto initval = std::unique_ptr<BaseAST>($1);
+    arr_vec.back().push_back(std::move(initval));
+}
+| ArrInitList ',' InitVal
+{
+    auto initval = std::unique_ptr<BaseAST>($3);
+    arr_vec.back().push_back(std::move(initval));
 };
 
 LVal: IDENT
 {
     auto ident = std::unique_ptr<std::string>($1);
     $$ = new LValAST(*ident);
+}
+| IDENT
+{
+    idx_vec.push_back(std::vector<std::unique_ptr<BaseAST>>());
+}
+IndexList
+{
+    auto ident = std::unique_ptr<std::string>($1);
+    $$ = new LValAST(*ident, idx_vec.back());
+    idx_vec.pop_back();
 };
+
+IndexList: Index | IndexList Index
+
+Index: '[' Exp ']'
+{
+    auto exp = std::unique_ptr<BaseAST>($2);
+    idx_vec.back().push_back(std::move(exp));
+}
 
 Exp: LOrExp
 {

@@ -18,16 +18,16 @@ int main(int argc, const char *argv[])
     auto mode = argv[1];
     auto input = argv[2];
     auto output = argv[4];
-  
+
     // 打开输入文件, 并且指定 lexer 在解析的时候读取这个文件
     yyin = fopen(input, "r");
-  
+
     // 调用 parser 函数, parser 函数会进一步调用 lexer 解析输入文件的
     std::unique_ptr<BaseAST> ast;
     yyparse(ast);
 
-    char buffer[1U << 15];
-    size_t sz = 1U << 15;
+    static char buffer[1U << 18];
+    size_t sz = 1U << 18;
 
     std::unique_ptr<CompUnitAST> comp_ast((CompUnitAST *)ast.release());
     koopa_raw_program_t krp = comp_ast->to_koopa_program();
@@ -47,7 +47,7 @@ int main(int argc, const char *argv[])
         std::string riscv = koopa2riscv(&new_krp);
         buffer[riscv.copy(buffer, riscv.size())] = 0;
     }
-    else if(std::string(mode) != "-koopa")
+    else if(std::string(mode) != "-koopa" && std::string(mode) != "-perf")
         throw std::runtime_error("error: unknown mode " + std::string(mode));
 
     std::cout << buffer;
