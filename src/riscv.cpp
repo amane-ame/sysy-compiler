@@ -232,7 +232,7 @@ static void value_branch(const koopa_raw_branch_t *kbranch, std::string &res)
     res += "\n";
     load_reg(kbranch->cond, "t0", res);
     res += "\tbnez t0, " + current_ident + "_skip" + std::to_string(magic) + "\n";
-    res += "\tj " + current_ident + "_" + std::string(kbranch->false_bb->name + 1) + "\n";
+    res += "\tj " + current_ident + "_" + std::string(kbranch->true_bb->name + 1) + "\n";
     res += current_ident + "_skip" + std::to_string(magic ++) + ":\n";
     res += "\tj " + current_ident + "_" + std::string(kbranch->false_bb->name + 1) + "\n";
 
