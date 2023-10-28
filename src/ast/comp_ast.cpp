@@ -378,7 +378,7 @@ GlobalVarDefAST::GlobalVarDefAST(std::unique_ptr<BaseAST> &vardef_ast)
 
 void *GlobalVarDefAST::to_koopa(void)
 {
-    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}}, string_data("@" + ident), {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_GLOBAL_ALLOC, .data.global_alloc.init = exp ? (koopa_raw_value_data *)exp->to_koopa() : new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_ZERO_INIT}}}};
+    koopa_raw_value_data *res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_POINTER, .data.pointer.base = new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}}, string_data("@" + ident), {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_GLOBAL_ALLOC, .data.global_alloc.init = exp ? new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_INTEGER, .data.integer.value = exp->value()}} : new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_ZERO_INIT}}}};
 
     block_inst.add_inst(res);
     symbol_list.add_symbol(ident, {LVal::VAR, res});

@@ -227,9 +227,13 @@ static void value_binary(const koopa_raw_binary_t *kbinary, int addr, std::strin
 
 static void value_branch(const koopa_raw_branch_t *kbranch, std::string &res)
 {
+    static int magic;
+
     res += "\n";
     load_reg(kbranch->cond, "t0", res);
-    res += "\tbnez t0, " + current_ident + "_" + std::string(kbranch->true_bb->name + 1) + "\n";
+    res += "\tbnez t0, " + current_ident + "_skip" + std::to_string(magic) + "\n";
+    res += "\tj " + current_ident + "_" + std::string(kbranch->false_bb->name + 1) + "\n";
+    res += current_ident + "_skip" + std::to_string(magic ++) + ":\n";
     res += "\tj " + current_ident + "_" + std::string(kbranch->false_bb->name + 1) + "\n";
 
     return;
