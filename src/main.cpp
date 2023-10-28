@@ -36,7 +36,7 @@ int main(int argc, const char *argv[])
     koopa_dump_to_string(kp, buffer, &sz);
     koopa_delete_program(kp);
 
-    if(std::string(mode) == "-riscv")
+    if(std::string(mode) == "-riscv" || std::string(mode) == "-perf")
     {
         koopa_program_t new_kp;
         koopa_parse_from_string(buffer, &new_kp);
@@ -47,7 +47,7 @@ int main(int argc, const char *argv[])
         std::string riscv = koopa2riscv(&new_krp);
         buffer[riscv.copy(buffer, riscv.size())] = 0;
     }
-    else if(std::string(mode) != "-koopa" && std::string(mode) != "-perf")
+    else if(std::string(mode) != "-koopa")
         throw std::runtime_error("error: unknown mode " + std::string(mode));
 
     std::cout << buffer;
