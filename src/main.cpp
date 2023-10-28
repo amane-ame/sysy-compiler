@@ -45,7 +45,7 @@ int main(int argc, const char *argv[])
         koopa_delete_program(new_kp);
 
         std::string riscv = koopa2riscv(&new_krp);
-        riscv.copy(buffer, riscv.size());
+        buffer[riscv.copy(buffer, riscv.size())] = 0;
     }
     else if(std::string(mode) != "-koopa")
         throw std::runtime_error("error: unknown mode " + std::string(mode));
