@@ -388,7 +388,6 @@ static void visit_slice(const koopa_raw_slice_t *rs, std::string &res)
 std::string koopa2riscv(const koopa_raw_program_t *krp)
 {
     std::string res;
-    res.reserve(1U << 22);
 
     res += ".data\n";
     visit_slice(&krp->values, res);
