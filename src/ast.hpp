@@ -4,9 +4,8 @@
 #include <string>
 #include <tuple>
 #include <vector>
-#include "block.hpp"
 #include "koopa.h"
-#include "symbol.hpp"
+#include "table.hpp"
 
 enum InstType
 {

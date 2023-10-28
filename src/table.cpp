@@ -1,8 +1,39 @@
 #include <algorithm>
+#include <stdexcept>
 #include <vector>
 #include "ast.hpp"
-#include "block.hpp"
 #include "koopa.h"
+#include "table.hpp"
+
+void SymbolList::new_scope(void)
+{
+    table.push_back(std::map<std::string, LVal>());
+
+    return;
+}
+
+void SymbolList::add_symbol(const std::string &name, LVal koopa_item)
+{
+    table.back()[name] = koopa_item;
+
+    return;
+}
+
+LVal SymbolList::get_symbol(const std::string &name)
+{
+    for(auto page = table.rbegin(); page != table.rend(); page ++)
+        if(page->count(name))
+            return (*page)[name];
+
+    throw("error: cannot find " + name + " in symbol table");
+}
+
+void SymbolList::end_scope(void)
+{
+    table.pop_back();
+
+    return;
+}
 
 void BlockInst::set_block(std::vector<void *> *_block)
 {

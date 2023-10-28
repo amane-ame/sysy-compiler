@@ -4,20 +4,27 @@
 #include "koopa.h"
 #include "riscv.hpp"
 
-static int inst_size(koopa_raw_value_t kval)
+static int type_size(koopa_raw_type_t ty)
 {
-    switch(kval->ty->tag)
+    switch(ty->tag)
     {
-    case KOOPA_RTT_UNIT:
-        return 0;
     case KOOPA_RTT_INT32:
     case KOOPA_RTT_POINTER:
         return 4;
+    case KOOPA_RTT_UNIT:
+        return 0;
+    case KOOPA_RTT_ARRAY:
+        return type_size(ty->data.array.base) * ty->data.array.len;
     default:
-        throw std::runtime_error("error: unknown kval.tag " + std::to_string(kval->ty->tag));
+        throw std::runtime_error("error: unknown ty.tag " + std::to_string(ty->tag));
     }
 
     return 0;
+}
+
+static int inst_size(koopa_raw_value_t kval)
+{
+    return type_size(kval->kind.tag == KOOPA_RVT_ALLOC ? kval->ty->data.pointer.base : kval->ty);
 }
 
 static int blk_size(koopa_raw_basic_block_t kblk, bool &call)
@@ -98,7 +105,42 @@ static void load_reg(koopa_raw_value_t kval, std::string reg, std::string &res)
         res += "\tlw " + reg + ", 0(t0)\n";
     }
     else
-        res += "\tlw " + reg + ", " + std::to_string(stack.fetch(kval)) + "(sp)\n";
+    {
+        int addr = stack.fetch(kval);
+        if(addr < -2048 || addr > 2047)
+        {
+            res += "\tli t6, " + std::to_string(addr) + "\n";
+            res += "\tadd t6, t6, sp\n";
+            res += "\tlw " + reg + ", 0(t6)\n";
+        }
+        else
+            res += "\tlw " + reg + ", " + std::to_string(addr) + "(sp)\n";
+    }
+
+    return;
+}
+
+static void store_stack(int addr, std::string reg, std::string &res)
+{
+    if(addr < -2048 || addr > 2047)
+    {
+        res += "\tli t6, " + std::to_string(addr) + "\n";
+        res += "\tadd t6, t6, sp\n";
+        res += "\tsw " + reg + ", 0(t6)\n";
+    }
+    else
+        res += "\tsw " + reg + ", " + std::to_string(addr) + "(sp)\n";
+
+    return;
+}
+
+static void value_aggregate(koopa_raw_value_t kval, std::string &res)
+{
+    if(kval->ty->tag == KOOPA_RTT_ARRAY)
+        for(int i = 0; i < (int)kval->kind.data.aggregate.elems.len; i ++)
+            value_aggregate((koopa_raw_value_t)kval->kind.data.aggregate.elems.buffer[i], res);
+    else
+        res += "\t.word " + std::to_string(kval->kind.data.integer.value) + "\n";
 
     return;
 }
@@ -107,8 +149,10 @@ static void value_global_alloc(koopa_raw_value_t kalloc, std::string &res)
 {
     res += ".globl " + std::string(kalloc->name + 1) + "\n";
     res += std::string(kalloc->name + 1) + ":\n";
-    if (kalloc->kind.data.global_alloc.init->kind.tag == KOOPA_RVT_ZERO_INIT)
-        res += "\t.zero 4\n";
+    if(kalloc->kind.data.global_alloc.init->kind.tag == KOOPA_RVT_ZERO_INIT)
+        res += "\t.zero " + std::to_string(type_size(kalloc->ty->data.pointer.base)) + "\n";
+    else if(kalloc->kind.data.global_alloc.init->kind.tag == KOOPA_RVT_AGGREGATE)
+        value_aggregate(kalloc->kind.data.global_alloc.init, res);
     else
         res += "\t.word " + std::to_string(kalloc->kind.data.global_alloc.init->kind.data.integer.value) + "\n";
 
@@ -119,7 +163,9 @@ static void value_load(const koopa_raw_load_t *kload, int addr, std::string &res
 {
     res += "\n";
     load_reg(kload->src, "t0", res);
-    res += "\tsw t0, " + std::to_string(addr) + "(sp)\n";
+    if(kload->src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || kload->src->kind.tag == KOOPA_RVT_GET_PTR)
+        res += "\tlw t0, 0(t0)\n";
+    store_stack(addr, "t0", res);
 
     return;
 }
@@ -134,8 +180,23 @@ static void value_store(const koopa_raw_store_t *kstore, std::string &res)
         res += "\tla t1, " + std::string(kstore->dest->name + 1) + "\n";
         dest = "0(t1)";
     }
+    else if(kstore->dest->kind.tag == KOOPA_RVT_GET_ELEM_PTR || kstore->dest->kind.tag == KOOPA_RVT_GET_PTR)
+    {
+        load_reg(kstore->dest, "t1", res);
+        dest = "0(t1)";
+    }
     else
-        dest = std::to_string(stack.fetch(kstore->dest)) + "(sp)";
+    {
+        int addr = stack.fetch(kstore->dest);
+        if(addr < -2048 || addr > 2047)
+        {
+            res += "\tli t1, " + std::to_string(addr) + "\n";
+            res += "\tadd t1, t1, sp\n";
+            dest = "0(t1)";
+        }
+        else
+            dest = std::to_string(addr) + "(sp)";
+    }
 
     if(kstore->value->kind.tag == KOOPA_RVT_FUNC_ARG_REF)
     {
@@ -143,7 +204,15 @@ static void value_store(const koopa_raw_store_t *kstore, std::string &res)
             res += "\tsw a" + std::to_string(kstore->value->kind.data.func_arg_ref.index) + ", " + dest + "\n";
         else
         {
-            res += "\tlw t0, " + std::to_string((kstore->value->kind.data.func_arg_ref.index - 8) * 4) + "(sp)\n";
+            int offset = (kstore->value->kind.data.func_arg_ref.index - 8) * 4;
+            if(offset < -2048 || offset > 2047)
+            {
+                res += "\tli t2, " + std::to_string(offset) + "\n";
+                res += "\taddi t2, t2, sp\n";
+                res += "\tlw t0, 0(t2)\n";
+            }
+            else
+                res += "\tlw t0, " + std::to_string(offset) + "(sp)\n";
             res += "\tsw t0, " + dest + "\n";
         }
     }
@@ -152,6 +221,58 @@ static void value_store(const koopa_raw_store_t *kstore, std::string &res)
         load_reg(kstore->value, "t0", res);
         res += "\tsw t0, " + dest + "\n";
     }
+
+    return;
+}
+
+static void value_get_ptr(const koopa_raw_get_ptr_t *kget, int addr, std::string &res)
+{
+    res += "\n";
+
+    int src_addr = stack.fetch(kget->src);
+    if(src_addr > 2047 || src_addr < -2048)
+    {
+        res += "\tli t0, " + std::to_string(src_addr) + "\n";
+        res += "\tadd t0, sp, t0\n";
+    }
+    else
+        res += "\taddi t0, sp, " + std::to_string(src_addr) + "\n";
+    res += "\tlw t0, 0(t0)\n";
+
+    load_reg(kget->index, "t1", res);
+    res += "\tli t2, " + std::to_string(type_size(kget->src->ty->data.pointer.base)) + "\n";
+    res += "\tmul t1, t1, t2\n";
+    res += "\tadd t0, t0, t1\n";
+    store_stack(addr, "t0", res);
+
+    return;
+}
+
+static void value_get_elem_ptr(const koopa_raw_get_elem_ptr_t *kget, int addr, std::string &res)
+{
+    res += "\n";
+
+    if(kget->src->kind.tag == KOOPA_RVT_GLOBAL_ALLOC)
+        res += "\tla t0, " + std::string(kget->src->name + 1) + "\n";
+    else
+    {
+        int src_addr = stack.fetch(kget->src);
+        if(src_addr > 2047 || src_addr < -2048)
+        {
+            res += "\tli t0, " + std::to_string(src_addr) + "\n";
+            res += "\tadd t0, sp, t0\n";
+        }
+        else
+            res += "\taddi t0, sp, " + std::to_string(src_addr) + "\n";
+        if(kget->src->kind.tag == KOOPA_RVT_GET_ELEM_PTR || kget->src->kind.tag == KOOPA_RVT_GET_PTR)
+            res += "\tlw t0, 0(t0)\n";
+    }
+
+    load_reg(kget->index, "t1", res);
+    res += "\tli t2, " + std::to_string(type_size(kget->src->ty->data.pointer.base->data.array.base)) + "\n";
+    res += "\tmul t1, t1, t2\n";
+    res += "\tadd t0, t0, t1\n";
+    store_stack(addr, "t0", res);
 
     return;
 }
@@ -220,14 +341,14 @@ static void value_binary(const koopa_raw_binary_t *kbinary, int addr, std::strin
         res += "\tsra t0, t0, t1\n";
         break;
     }
-    res += "\tsw t0, " + std::to_string(addr) += "(sp)\n";
+    store_stack(addr, "t0", res);
 
     return;
 }
 
 static void value_branch(const koopa_raw_branch_t *kbranch, std::string &res)
 {
-    static int magic;
+    // static int magic;
 
     res += "\n";
     load_reg(kbranch->cond, "t0", res);
@@ -252,21 +373,29 @@ static void value_jump(const koopa_raw_jump_t *kjump, std::string &res)
 static void value_call(const koopa_raw_call_t *kcall, int addr, std::string &res)
 {
     res += "\n";
-    for(int i = 0; i < std::min((int)kcall->args.len, 8); i++)
+    for(int i = 0; i < std::min((int)kcall->args.len, 8); i ++)
         load_reg((koopa_raw_value_t)kcall->args.buffer[i], "a" + std::string(1, '0' + i), res);
 
     bool call = false;
     int sz = func_size(kcall->callee, call);
     if(sz)
         sz = ((sz - 1) / 16 + 1) * 16;
-    for(int i = 8; i < (int)kcall->args.len; i++)
+    for(int i = 8; i < (int)kcall->args.len; i ++)
     {
         load_reg((koopa_raw_value_t)kcall->args.buffer[i], "t0", res);
-        res += "\tsw t0, " + std::to_string((i - 8) * 4 - sz) + "(sp)\n";
+        int offset = (i - 8) * 4 - sz;
+        if(offset < -2048 || offset > 2047)
+        {
+            res += "\tli t6, " + std::to_string(offset) + "\n";
+            res += "\tadd t6, t6, sp\n";
+            res += "\tsw t0, 0(t6)\n";
+        }
+        else
+            res += "\tsw t0, " + std::to_string(offset) + "(sp)\n";
     }
     res += "\tcall " + std::string(kcall->callee->name + 1) + "\n";
-    if (addr != -1)
-        res += "\tsw a0, " + std::to_string(addr) + "(sp)\n";
+    if(addr != -1)
+        store_stack(addr, "a0", res);
 
     return;
 }
@@ -275,16 +404,30 @@ static void value_return(const koopa_raw_return_t *kret, std::string &res)
 {
     res += "\n";
     if(kret->value)
-    {
-        if(kret->value->kind.tag == KOOPA_RVT_INTEGER)
-            res += "\tli a0, " + std::to_string(kret->value->kind.data.integer.value) + "\n";
-        else
-            res += "\tlw a0, " + std::to_string(stack.fetch(kret->value)) + "(sp)\n";
-    }
+        load_reg(kret->value, "a0", res);
     if(stack.has_call())
-        res += "\tlw ra, " + std::to_string(stack.size() - 4) + "(sp)\n";
+    {
+        int offset = stack.size() - 4;
+        if(offset < -2048 || offset > 2047)
+        {
+            res += "\tli t6, " + std::to_string(offset) + "\n";
+            res += "\tadd t6, t6, sp\n";
+            res += "\tlw ra, 0(t6)\n";
+        }
+        else
+            res += "\tlw ra, " + std::to_string(offset) + "(sp)\n";
+    }
     if(stack.size())
-        res += "\taddi sp, sp, " + std::to_string(stack.size()) + "\n";
+    {
+        int sz = stack.size();
+        if(sz < -2048 || sz > 2047)
+        {
+            res += "\tli t0, " + std::to_string(sz) + "\n";
+            res += "\tadd sp, sp, t0\n";
+        }
+        else
+            res += "\taddi sp, sp, " + std::to_string(sz) + "\n";
+    }
     res += "\tret\n";
 
     return;
@@ -307,10 +450,26 @@ static void visit_func(koopa_raw_function_t kfunc, std::string &res)
     if(size)
     {
         size = ((size - 1) / 16 + 1) * 16;
-        res += "\taddi sp, sp, " + std::to_string(-size) + "\n";
+        if(-size < -2048 || -size > 2047)
+        {
+            res += "\tli t0, " + std::to_string(-size) + "\n";
+            res += "\tadd sp, sp, t0\n";
+        }
+        else
+            res += "\taddi sp, sp, " + std::to_string(-size) + "\n";
     }
     if(call)
-        res += "\tsw ra, " + std::to_string(size - 4) + "(sp)\n";
+    {
+        int offset = size - 4;
+        if(offset < -2048 || offset > 2047)
+        {
+            res += "\tli t0, " + std::to_string(offset) + "\n";
+            res += "\tadd t0, sp, t0\n";
+            res += "\tsw ra, 0(t0)\n";
+        }
+        else
+            res += "\tsw ra, " + std::to_string(offset) + "(sp)\n";
+    }
     stack.clear(size, call);
     current_ident = std::string(kfunc->name + 1);
     visit_slice(&kfunc->bbs, res);
@@ -345,6 +504,12 @@ static void visit_value(koopa_raw_value_t kval, std::string &res)
         break;
     case KOOPA_RVT_STORE:
         value_store(&kval->kind.data.store, res);
+        break;
+    case KOOPA_RVT_GET_PTR:
+        value_get_ptr(&kval->kind.data.get_ptr, addr, res);
+        break;
+    case KOOPA_RVT_GET_ELEM_PTR:
+        value_get_elem_ptr(&kval->kind.data.get_elem_ptr, addr, res);
         break;
     case KOOPA_RVT_BINARY:
         value_binary(&kval->kind.data.binary, addr, res);

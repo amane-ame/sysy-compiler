@@ -85,7 +85,7 @@ void *LValAST::to_koopa(void)
         res = new koopa_raw_value_data{new koopa_raw_type_kind{.tag = KOOPA_RTT_INT32}, nullptr, {nullptr, 0, KOOPA_RSIK_VALUE}, {.tag = KOOPA_RVT_LOAD, .data.load.src = (koopa_raw_value_t)var.number}};
         block_inst.add_inst(res);
     }
-    else if (var.type == LVal::ARRAY)
+    else if(var.type == LVal::ARRAY)
     {
         bool load = false;
         koopa_raw_value_data *get;

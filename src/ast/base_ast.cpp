@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include <vector>
 #include "../ast.hpp"
 
 SymbolList BaseAST::symbol_list;
