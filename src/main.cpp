@@ -26,8 +26,8 @@ int main(int argc, const char *argv[])
     std::unique_ptr<BaseAST> ast;
     yyparse(ast);
 
-    static char buffer[1U << 18];
-    size_t sz = 1U << 18;
+    static char buffer[1U << 22];
+    size_t sz = 1U << 22;
 
     std::unique_ptr<CompUnitAST> comp_ast((CompUnitAST *)ast.release());
     koopa_raw_program_t krp = comp_ast->to_koopa_program();
