@@ -230,7 +230,7 @@ static void value_get_ptr(const koopa_raw_get_ptr_t *kget, int addr, std::string
     res += "\n";
 
     int src_addr = stack.fetch(kget->src);
-    if(src_addr > 2047 || src_addr < -2048)
+    if(src_addr < -2048 || src_addr > 2047)
     {
         res += "\tli t0, " + std::to_string(src_addr) + "\n";
         res += "\tadd t0, sp, t0\n";
@@ -257,7 +257,7 @@ static void value_get_elem_ptr(const koopa_raw_get_elem_ptr_t *kget, int addr, s
     else
     {
         int src_addr = stack.fetch(kget->src);
-        if(src_addr > 2047 || src_addr < -2048)
+        if(src_addr < -2048 || src_addr > 2047)
         {
             res += "\tli t0, " + std::to_string(src_addr) + "\n";
             res += "\tadd t0, sp, t0\n";
@@ -348,16 +348,14 @@ static void value_binary(const koopa_raw_binary_t *kbinary, int addr, std::strin
 
 static void value_branch(const koopa_raw_branch_t *kbranch, std::string &res)
 {
-    // static int magic;
+    static int magic;
 
     res += "\n";
     load_reg(kbranch->cond, "t0", res);
-    // res += "\tbnez t0, " + current_ident + "_skip" + std::to_string(magic) + "\n";
-    // res += "\tj " + current_ident + "_" + std::string(kbranch->true_bb->name + 1) + "\n";
-    // res += current_ident + "_skip" + std::to_string(magic ++) + ":\n";
-    // res += "\tj " + current_ident + "_" + std::string(kbranch->false_bb->name + 1) + "\n";
-    res += "\tbnez t0, " + current_ident + "_" + std::string(kbranch->true_bb->name + 1) + "\n";
+    res += "\tbnez t0, " + current_ident + "_skip" + std::to_string(magic) + "\n";
     res += "\tj " + current_ident + "_" + std::string(kbranch->false_bb->name + 1) + "\n";
+    res += current_ident + "_skip" + std::to_string(magic ++) + ":\n";
+    res += "\tj " + current_ident + "_" + std::string(kbranch->true_bb->name + 1) + "\n";
 
     return;
 }

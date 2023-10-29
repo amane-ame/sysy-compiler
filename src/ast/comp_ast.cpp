@@ -179,7 +179,10 @@ void *FuncDefAST::to_koopa(void)
     for(auto &inst : ((BlockAST *)block.get())->insts)
         inst.second->to_koopa();
     if(((BlockAST *)block.get())->insts.empty() || typeid((((BlockAST *)block.get())->insts).back()) != typeid(ReturnAST))
-        ReturnAST().to_koopa();
+    {
+        auto zero = std::unique_ptr<BaseAST>(new NumberAST(0));
+        (((koopa_raw_type_kind *)func_type->to_koopa())->tag == KOOPA_RTT_UNIT ? ReturnAST() : ReturnAST(zero)).to_koopa();
+    }
 
     block_inst.end_block();
     symbol_list.end_scope();
@@ -298,9 +301,9 @@ void *BranchAST::to_koopa(void)
 
 WhileAST::WhileAST(std::unique_ptr<BaseAST> &_exp, std::vector<std::pair<InstType, std::unique_ptr<BaseAST>>> &_body_insts)
 {
+    exp = std::move(_exp);
     for (auto &inst : _body_insts)
         body_insts.push_back(std::make_pair(inst.first, std::move(inst.second)));
-    exp = std::move(_exp);
 
     return;
 }
